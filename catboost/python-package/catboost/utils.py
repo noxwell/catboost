@@ -1,4 +1,4 @@
-from .core import Pool, CatBoostError, get_catboost_bin_module, ARRAY_TYPES
+from .core import Pool, CatBoostError, get_catboost_bin_module, ARRAY_TYPES, create_quantize_params
 from collections import defaultdict
 from contextlib import contextmanager
 import numpy as np
@@ -478,4 +478,3 @@ def select_threshold(model=None, data=None, curve=None, FPR=None, FNR=None, thre
         return _select_threshold(None, None, curve, FPR, FNR, thread_count)
     else:
         raise CatBoostError('One of the parameters data and curve should be set.')
-

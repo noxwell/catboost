@@ -5,6 +5,7 @@
 #include "data_provider_builders.h"
 
 #include <catboost/libs/column_description/cd_parser.h>
+#include <catboost/libs/data/quantization.h>
 #include <catboost/libs/helpers/exception.h>
 #include <catboost/libs/helpers/int_cast.h>
 #include <catboost/libs/logging/logging.h>
@@ -251,6 +252,123 @@ namespace NCB {
         }
 
         return dataProviders;
+    }
+
+
+    TDataProviderPtr ReadAndQuantizeDataset(
+        TMaybe<ETaskType> /*taskType*/,
+        const TPathWithScheme& poolPath,
+        const TPathWithScheme& pairsFilePath, // can be uninited
+        const TPathWithScheme& groupWeightsFilePath, // can be uninited
+        const TPathWithScheme& timestampsFilePath, // can be uninited
+        const TPathWithScheme& baselineFilePath, // can be uninited
+        const TPathWithScheme& featureNamesPath, // can be uninited
+        const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
+        const TVector<ui32>& ignoredFeatures,
+        EObjectsOrder objectsOrder,
+        NJson::TJsonValue plainJsonParams,
+        TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
+        TDatasetSubset loadSubset,
+        TMaybe<TVector<NJson::TJsonValue>*> classLabels,
+        NPar::TLocalExecutor* localExecutor
+    ) {
+        CB_ENSURE_INTERNAL(!baselineFilePath.Inited() || classLabels, "ClassLabels must be specified if baseline file is specified");
+        if (classLabels) {
+            UpdateClassLabelsFromBaselineFile(baselineFilePath, *classLabels);
+        }
+        auto datasetLoader = GetProcessor<IDatasetLoader>(
+            poolPath, // for choosing processor
+
+            // processor args
+            TDatasetLoaderPullArgs {
+                poolPath,
+
+                TDatasetLoaderCommonArgs {
+                    pairsFilePath,
+                    groupWeightsFilePath,
+                    baselineFilePath,
+                    timestampsFilePath,
+                    featureNamesPath,
+                    classLabels ? **classLabels : TVector<NJson::TJsonValue>(),
+                    columnarPoolFormatParams.DsvFormat,
+                    MakeCdProviderFromFile(columnarPoolFormatParams.CdFilePath),
+                    ignoredFeatures,
+                    objectsOrder,
+                    10000, // TODO: make it a named constant
+                    loadSubset,
+                    localExecutor
+                }
+            }
+        );
+
+        CB_ENSURE(
+            EDatasetVisitorType::QuantizedFeatures != datasetLoader->GetVisitorType(),
+            "Data is already quantized"
+        );
+
+        TDataProviderBuilderOptions builderOptions;
+        builderOptions.PoolPath = poolPath;
+
+        THolder<IDataProviderBuilder> dataProviderBuilder = CreateDataProviderBuilder(
+            datasetLoader->GetVisitorType(),
+            builderOptions,
+            loadSubset,
+            localExecutor
+        );
+        CB_ENSURE_INTERNAL(
+            dataProviderBuilder,
+            "Failed to create data provider builder for visitor of type " << datasetLoader->GetVisitorType()
+        );
+
+        datasetLoader->DoIfCompatible(dynamic_cast<IDatasetVisitor*>(dataProviderBuilder.Get()));
+        TDataProviderPtr dataProviderPtr = dataProviderBuilder->GetResult();
+        dataProviderPtr.Get()->ObjectsData = ConstructQuantizedPoolFromRawPool(
+            dataProviderPtr, std::move(plainJsonParams), std::move(quantizedFeaturesInfo));
+        return dataProviderPtr;
+    }
+
+
+    TDataProviderPtr ReadAndQuantizeDataset(
+        TMaybe<ETaskType> taskType,
+        const TPathWithScheme& poolPath,
+        const TPathWithScheme& pairsFilePath, // can be uninited
+        const TPathWithScheme& groupWeightsFilePath, // can be uninited
+        const TPathWithScheme& timestampsFilePath, // can be uninited
+        const TPathWithScheme& baselineFilePath, // can be uninited
+        const TPathWithScheme& featureNamesPath, // can be uninited
+        const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
+        const TVector<ui32>& ignoredFeatures,
+        EObjectsOrder objectsOrder,
+        NJson::TJsonValue plainJsonParams,
+        TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
+        int threadCount,
+        bool verbose,
+        TMaybe<TVector<NJson::TJsonValue>*> classLabels
+    ) {
+        NPar::TLocalExecutor localExecutor;
+        localExecutor.RunAdditionalThreads(threadCount - 1);
+
+        TSetLoggingVerboseOrSilent inThisScope(verbose);
+
+        TDataProviderPtr dataProviderPtr = ReadAndQuantizeDataset(
+            taskType,
+            poolPath,
+            pairsFilePath,
+            groupWeightsFilePath,
+            timestampsFilePath,
+            baselineFilePath,
+            featureNamesPath,
+            columnarPoolFormatParams,
+            ignoredFeatures,
+            objectsOrder,
+            std::move(plainJsonParams),
+            std::move(quantizedFeaturesInfo),
+            TDatasetSubset::MakeColumns(),
+            classLabels,
+            &localExecutor
+        );
+
+        return dataProviderPtr;
     }
 
 } // NCB
