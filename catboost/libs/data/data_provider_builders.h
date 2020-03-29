@@ -52,6 +52,9 @@ namespace NCB {
         ui64 MaxCpuRamUsage = Max<ui64>();
         bool SkipCheck = false; // to increase speed, esp. when applying
         ESparseArrayIndexingType SparseArrayIndexingType = ESparseArrayIndexingType::Undefined;
+        bool SampleDataset = false;
+        ui32 SampleSize = 0;
+        ui32 SampleSeed = 0;
     };
 
     // can return nullptr if IDataProviderBuilder for such visitor type hasn't been implemented yet

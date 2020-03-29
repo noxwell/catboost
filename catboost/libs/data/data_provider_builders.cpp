@@ -14,6 +14,7 @@
 #include <catboost/libs/helpers/compression.h>
 #include <catboost/libs/helpers/exception.h>
 #include <catboost/libs/helpers/resource_holder.h>
+#include <catboost/libs/helpers/sample.h>
 #include <catboost/libs/logging/logging.h>
 #include <catboost/private/libs/labels/helpers.h>
 #include <catboost/private/libs/options/restrictions.h>
@@ -921,6 +922,329 @@ namespace NCB {
 
         bool InProcess;
         bool ResultTaken;
+    };
+
+
+    class TRawObjectsOrderSamplingDataProviderBuilder : public IDataProviderBuilder,
+                                                        public IRawObjectsOrderDataVisitor {
+    public:
+        TRawObjectsOrderSamplingDataProviderBuilder(
+            const TDataProviderBuilderOptions& options,
+            THolder<TRawObjectsOrderDataProviderBuilder> builder
+        )
+            : DataBuilder(std::move(builder))
+            , Options(options)
+            , Rand(Options.SampleSeed) {
+        }
+
+        void Start(
+            bool inBlock,
+            const TDataMetaInfo& metaInfo,
+            bool haveUnknownNumberOfSparseFeatures,
+            ui32 objectCount,
+            EObjectsOrder objectsOrder,
+
+            // keep necessary resources for data to be available (memory mapping for a file for example)
+            TVector<TIntrusivePtr<IResourceHolder>> resourceHolders
+        ) override {
+            CB_ENSURE(!inBlock, "block read is not supported, when sampling");
+
+            ObjectCount = objectCount;
+            SampleCount = std::min(ObjectCount, Options.SampleSize);
+            SampleIdxToGlobalIdx = SampleIndices<ui32>(ObjectCount, SampleCount, &Rand);
+            // sort sample indices for unchanged data order and for cache friendliness
+            Sort(SampleIdxToGlobalIdx.begin(), SampleIdxToGlobalIdx.end());
+
+            GlobalIdxToSampleIdx.assign(ObjectCount, NotSet);
+            for (auto i : xrange(SampleCount)) {
+                GlobalIdxToSampleIdx[SampleIdxToGlobalIdx[i]] = i;
+            }
+
+            Cursor = NotSet;
+            NextCursor = 0;
+
+            NCB::PrepareForInitialization(metaInfo.HasGroupId, ObjectCount, 0, &AllGroupIds);
+
+            DataBuilder->Start(
+                inBlock,
+                metaInfo,
+                haveUnknownNumberOfSparseFeatures,
+                SampleCount,
+                objectsOrder,
+                resourceHolders
+            );
+
+            DataBuilder->StartNextBlock(SampleCount);
+        }
+
+        void StartNextBlock(ui32 blockSize) override {
+            Cursor = NextCursor;
+            NextCursor = Cursor + blockSize;
+            LocalIdxToSampleIdx.resize(blockSize);
+            for (auto localObjectIdx : xrange(blockSize)) {
+                LocalIdxToSampleIdx[localObjectIdx] = GlobalIdxToSampleIdx[Cursor + localObjectIdx];
+            }
+        }
+
+        void AddGroupId(ui32 localObjectIdx, TGroupId value) override {
+            (*AllGroupIds)[Cursor + localObjectIdx] = value;
+
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddGroupId(sampleIdx, value);
+        }
+
+        void AddSubgroupId(ui32 localObjectIdx, TSubgroupId value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddSubgroupId(sampleIdx, value);
+        }
+
+        void AddTimestamp(ui32 localObjectIdx, ui64 value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTimestamp(sampleIdx, value);
+        }
+
+        void AddFloatFeature(ui32 localObjectIdx, ui32 flatFeatureIdx, float feature) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddFloatFeature(sampleIdx, flatFeatureIdx, feature);
+        }
+
+        void AddAllFloatFeatures(ui32 localObjectIdx, TConstArrayRef<float> features) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllFloatFeatures(sampleIdx, features);
+        }
+
+        void AddAllFloatFeatures(
+            ui32 localObjectIdx,
+            TConstPolymorphicValuesSparseArray<float, ui32> features
+        ) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllFloatFeatures(sampleIdx, std::move(features));
+        }
+
+        ui32 GetCatFeatureValue(ui32 flatFeatureIdx, TStringBuf feature) override {
+            // TODO(vetaleha) check if it is correct for hashing
+            return DataBuilder->GetCatFeatureValue(flatFeatureIdx, feature);
+        }
+
+        void AddCatFeature(ui32 localObjectIdx, ui32 flatFeatureIdx, TStringBuf feature) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddCatFeature(sampleIdx, flatFeatureIdx, feature);
+        }
+
+        void AddAllCatFeatures(ui32 localObjectIdx, TConstArrayRef<ui32> features) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllCatFeatures(sampleIdx, features);
+        }
+
+        void AddAllCatFeatures(ui32 localObjectIdx, TConstPolymorphicValuesSparseArray<ui32, ui32> features) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllCatFeatures(sampleIdx, std::move(features));
+        }
+
+        void AddCatFeatureDefaultValue(ui32 flatFeatureIdx, TStringBuf feature) override {
+            DataBuilder->AddCatFeatureDefaultValue(flatFeatureIdx, feature);
+        }
+
+        void AddTextFeature(ui32 localObjectIdx, ui32 flatFeatureIdx, TStringBuf feature) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTextFeature(sampleIdx, flatFeatureIdx, feature);
+        }
+
+        void AddTextFeature(ui32 localObjectIdx, ui32 flatFeatureIdx, const TString& feature) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTextFeature(sampleIdx, flatFeatureIdx, feature);
+        }
+
+        void AddAllTextFeatures(ui32 localObjectIdx, TConstArrayRef<TString> features) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllTextFeatures(sampleIdx, features);
+        }
+
+        void AddAllTextFeatures(ui32 localObjectIdx, TConstPolymorphicValuesSparseArray<TString, ui32> features) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddAllTextFeatures(sampleIdx, std::move(features));
+        }
+
+        void AddTarget(ui32 localObjectIdx, const TString& value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTarget(sampleIdx, value);
+        }
+
+        void AddTarget(ui32 localObjectIdx, float value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTarget(sampleIdx, value);
+        }
+
+        void AddTarget(ui32 flatTargetIdx, ui32 localObjectIdx, const TString& value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTarget(flatTargetIdx, sampleIdx, value);
+        }
+
+        void AddTarget(ui32 flatTargetIdx, ui32 localObjectIdx, float value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTarget(flatTargetIdx, sampleIdx, value);
+        }
+
+        void AddBaseline(ui32 localObjectIdx, ui32 baselineIdx, float value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddTarget(sampleIdx, baselineIdx, value);
+        }
+
+        void AddWeight(ui32 localObjectIdx, float value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddWeight(sampleIdx, value);
+        }
+
+        void AddGroupWeight(ui32 localObjectIdx, float value) override {
+            const ui32 sampleIdx = LocalIdxToSampleIdx[localObjectIdx];
+            if (sampleIdx == NotSet) {
+                return;
+            }
+            DataBuilder->AddWeight(sampleIdx, value);
+        }
+
+        void SetGroupWeights(TVector<float>&& groupWeights) override {
+            // TODO (vetaleha) use GetSubset or return subset of group ids
+            CB_ENSURE_INTERNAL(groupWeights.size() == ObjectCount, "groupWeights should be ObjectCount size");
+            DataBuilder->SetGroupWeights(SampleObjectsData(std::move(groupWeights)));
+        }
+
+        void SetBaseline(TVector<TVector<float>>&& multidimBaseline) override {
+            // TODO (vetaleha) use GetMultidimBaselineSubset
+            for (auto& baseline : multidimBaseline) {
+                CB_ENSURE_INTERNAL(baseline.size() == ObjectCount, "baseline should be ObjectCount size");
+                baseline = SampleObjectsData(std::move(baseline));
+            }
+            DataBuilder->SetBaseline(std::move(multidimBaseline));
+        }
+
+        void SetPairs(TVector<TPair>&& pairs) override {
+            // TODO (vetaleha) use GetPairsSubset
+            TVector<TPair> result;
+            for (const auto& pair : pairs) {
+                const auto dstWinnerId = GlobalIdxToSampleIdx[pair.WinnerId];
+                if (dstWinnerId == NotSet) {
+                    continue;
+                }
+                const auto dstLoserId = GlobalIdxToSampleIdx[pair.LoserId];
+                if (dstLoserId == NotSet) {
+                    continue;
+                }
+                result.emplace_back(dstWinnerId, dstLoserId, pair.Weight);
+            }
+            DataBuilder->SetPairs(std::move(result));
+        }
+
+        void SetTimestamps(TVector<ui64>&& timestamps) override {
+            // TODO (vetaleha) use GetSubset or return subset of group ids
+            CB_ENSURE_INTERNAL(timestamps.size() == ObjectCount, "timestamps should be ObjectCount size");
+            DataBuilder->SetTimestamps(SampleObjectsData(std::move(timestamps)));
+        }
+
+        TMaybeData<TConstArrayRef<TGroupId>> GetGroupIds() const override {
+            // TODO (vetaleha) return subset of group ids
+            return AllGroupIds;
+        }
+
+        void Finish() override {
+            DataBuilder->Finish();
+        }
+
+        TDataProviderPtr GetResult() override {
+            return DataBuilder->GetResult();
+        }
+
+    private:
+        template <typename T>
+        TVector<T> SampleObjectsData(TVector<T>&& data) {
+            // TODO (vetaleha) replace with GetSubset
+            TVector<T> result(SampleCount);
+            for (auto sampleIdx : xrange(SampleCount)) {
+                result[sampleIdx] = std::move(data[SampleIdxToGlobalIdx[sampleIdx]]);
+            }
+            return result;
+        }
+
+        ui32 ObjectCount;
+        ui32 SampleCount;
+
+        THolder<TRawObjectsOrderDataProviderBuilder> DataBuilder;
+
+        static constexpr const ui32 NotSet = Max<ui32>();
+
+        ui32 Cursor;
+        ui32 NextCursor;
+
+        // TODO(vetaleha) maybe HashMap has enough performance
+        TVector<ui32> GlobalIdxToSampleIdx;
+        // TODO(vetaleha) or get rid of this
+        TVector<ui32> LocalIdxToSampleIdx;
+        TVector<ui32> SampleIdxToGlobalIdx;
+
+        // group ids for all objects, required for GetGroupIds
+        // TODO(vetaleha) maybe there is way to not store all group ids
+        TMaybeData<TVector<TGroupId>> AllGroupIds;
+
+        TDataProviderBuilderOptions Options;
+
+        TRestorableFastRng64 Rand;
     };
 
 
@@ -2161,9 +2485,17 @@ namespace NCB {
         TDatasetSubset loadSubset,
         NPar::TLocalExecutor* localExecutor
     ) {
+        CB_ENSURE(!options.SampleDataset || visitorType == EDatasetVisitorType::RawObjectsOrder,
+                  "sample mode is supported only for raw objects visitor");
         switch (visitorType) {
-            case EDatasetVisitorType::RawObjectsOrder:
-                return MakeHolder<TRawObjectsOrderDataProviderBuilder>(options, localExecutor);
+            case EDatasetVisitorType::RawObjectsOrder: {
+                auto result = MakeHolder<TRawObjectsOrderDataProviderBuilder>(options, localExecutor);
+                if (options.SampleDataset) {
+                    return MakeHolder<TRawObjectsOrderSamplingDataProviderBuilder>(options, std::move(result));
+                } else {
+                    return result;
+                }
+            }
             case EDatasetVisitorType::RawFeaturesOrder:
                 return MakeHolder<TRawFeaturesOrderDataProviderBuilder>(options, localExecutor);
             case EDatasetVisitorType::QuantizedFeatures:

@@ -10,6 +10,7 @@
 #include <catboost/libs/helpers/int_cast.h>
 #include <catboost/libs/logging/logging.h>
 #include <catboost/private/libs/data_util/exists_checker.h>
+#include <catboost/private/libs/options/plain_options_helper.h>
 
 #include <util/datetime/base.h>
 
@@ -256,7 +257,7 @@ namespace NCB {
 
 
     TDataProviderPtr ReadAndQuantizeDataset(
-        TMaybe<ETaskType> /*taskType*/,
+        TMaybe<ETaskType> taskType,
         const TPathWithScheme& poolPath,
         const TPathWithScheme& pairsFilePath, // can be uninited
         const TPathWithScheme& groupWeightsFilePath, // can be uninited
@@ -272,59 +273,116 @@ namespace NCB {
         TMaybe<TVector<NJson::TJsonValue>*> classLabels,
         NPar::TLocalExecutor* localExecutor
     ) {
+        const ui32 kBufferSize = 10;
+        const ui32 kReservoirMaxSize = 50;
         CB_ENSURE_INTERNAL(!baselineFilePath.Inited() || classLabels, "ClassLabels must be specified if baseline file is specified");
         if (classLabels) {
             UpdateClassLabelsFromBaselineFile(baselineFilePath, *classLabels);
         }
-        auto datasetLoader = GetProcessor<IDatasetLoader>(
-            poolPath, // for choosing processor
 
-            // processor args
-            TDatasetLoaderPullArgs {
-                poolPath,
+        const auto create_loader = [&] {
+            return GetProcessor<IDatasetLoader>(
+                poolPath, // for choosing processor
 
-                TDatasetLoaderCommonArgs {
-                    pairsFilePath,
-                    groupWeightsFilePath,
-                    baselineFilePath,
-                    timestampsFilePath,
-                    featureNamesPath,
-                    classLabels ? **classLabels : TVector<NJson::TJsonValue>(),
-                    columnarPoolFormatParams.DsvFormat,
-                    MakeCdProviderFromFile(columnarPoolFormatParams.CdFilePath),
-                    ignoredFeatures,
-                    objectsOrder,
-                    10000, // TODO: make it a named constant
-                    loadSubset,
-                    localExecutor
+                // processor args
+                TDatasetLoaderPullArgs {
+                    poolPath,
+
+                    TDatasetLoaderCommonArgs {
+                        pairsFilePath,
+                        groupWeightsFilePath,
+                        baselineFilePath,
+                        timestampsFilePath,
+                        featureNamesPath,
+                        classLabels ? **classLabels : TVector<NJson::TJsonValue>(),
+                        columnarPoolFormatParams.DsvFormat,
+                        MakeCdProviderFromFile(columnarPoolFormatParams.CdFilePath),
+                        ignoredFeatures,
+                        objectsOrder,
+                        kBufferSize,
+                        loadSubset,
+                        localExecutor
+                    }
                 }
-            }
-        );
+            );
+        };
+
+        auto datasetLoader = create_loader();
 
         CB_ENSURE(
             EDatasetVisitorType::QuantizedFeatures != datasetLoader->GetVisitorType(),
             "Data is already quantized"
         );
 
-        TDataProviderBuilderOptions builderOptions;
-        builderOptions.PoolPath = poolPath;
+        auto* rawObjectsOrderDatasetLoader =
+            dynamic_cast<NCB::IRawObjectsOrderDatasetLoader*>(datasetLoader.Get());
 
-        THolder<IDataProviderBuilder> dataProviderBuilder = CreateDataProviderBuilder(
-            datasetLoader->GetVisitorType(),
-            builderOptions,
-            loadSubset,
-            localExecutor
-        );
-        CB_ENSURE_INTERNAL(
-            dataProviderBuilder,
-            "Failed to create data provider builder for visitor of type " << datasetLoader->GetVisitorType()
-        );
+        if (!rawObjectsOrderDatasetLoader) {
+            TDataProviderBuilderOptions builderOptions;
+            builderOptions.GpuDistributedFormat = !loadSubset.HasFeatures && taskType && *taskType == ETaskType::GPU
+                                                  && EDatasetVisitorType::QuantizedFeatures == datasetLoader->GetVisitorType()
+                                                  && poolPath.Inited() && IsSharedFs(poolPath);
+            builderOptions.PoolPath = poolPath;
 
-        datasetLoader->DoIfCompatible(dynamic_cast<IDatasetVisitor*>(dataProviderBuilder.Get()));
-        TDataProviderPtr dataProviderPtr = dataProviderBuilder->GetResult();
-        dataProviderPtr.Get()->ObjectsData = ConstructQuantizedPoolFromRawPool(
-            dataProviderPtr, std::move(plainJsonParams), std::move(quantizedFeaturesInfo));
-        return dataProviderPtr;
+            THolder<IDataProviderBuilder> dataProviderBuilder = CreateDataProviderBuilder(
+                datasetLoader->GetVisitorType(),
+                builderOptions,
+                loadSubset,
+                localExecutor
+            );
+            CB_ENSURE_INTERNAL(
+                dataProviderBuilder,
+                "Failed to create data provider builder for visitor of type " << datasetLoader->GetVisitorType()
+            );
+
+            datasetLoader->DoIfCompatible(
+                dynamic_cast<IDatasetVisitor*>(dataProviderBuilder.Get()));
+            TDataProviderPtr dataProviderPtr = dataProviderBuilder->GetResult();
+            dataProviderPtr.Get()->ObjectsData = ConstructQuantizedPoolFromRawPool(
+                dataProviderPtr, std::move(plainJsonParams), std::move(quantizedFeaturesInfo));
+            return dataProviderPtr;
+        } else {
+            NJson::TJsonValue jsonParams;
+            NJson::TJsonValue outputJsonParams;
+            NCatboostOptions::PlainJsonToOptions(plainJsonParams, &jsonParams, &outputJsonParams);
+            NCatboostOptions::TCatBoostOptions catBoostOptions(NCatboostOptions::LoadOptions(jsonParams));
+
+            TDataProviderBuilderOptions builderOptions;
+            builderOptions.GpuDistributedFormat = !loadSubset.HasFeatures && taskType && *taskType == ETaskType::GPU
+                                                  && EDatasetVisitorType::QuantizedFeatures == datasetLoader->GetVisitorType()
+                                                  && poolPath.Inited() && IsSharedFs(poolPath);
+            builderOptions.PoolPath = poolPath;
+            builderOptions.SampleDataset = true;
+            builderOptions.SampleSize = kReservoirMaxSize;
+            builderOptions.SampleSeed = catBoostOptions.RandomSeed;
+
+            THolder<IDataProviderBuilder> samplingBuilder = CreateDataProviderBuilder(
+                datasetLoader->GetVisitorType(),
+                builderOptions,
+                loadSubset,
+                localExecutor
+            );
+            CB_ENSURE_INTERNAL(
+                samplingBuilder,
+                "Failed to create data provider builder for visitor of type " << datasetLoader->GetVisitorType()
+            );
+
+            datasetLoader->DoIfCompatible(dynamic_cast<IDatasetVisitor*>(samplingBuilder.Get()));
+            return samplingBuilder->GetResult();
+
+            //            auto secondPassDatasetLoader = create_loader();
+//
+//            CB_ENSURE_INTERNAL(datasetLoader->GetVisitorType() == EDatasetVisitorType::RawObjectsOrder,
+//                "Loader has unsupported visitor type: " << datasetLoader->GetVisitorType());
+//            CB_ENSURE_INTERNAL(datasetLoader->GetVisitorType() == EDatasetVisitorType::RawObjectsOrder,
+//                "Second loader has unsupported visitor type: " << secondPassDatasetLoader->GetVisitorType());
+//
+//            auto* secondPassRawObjectsOrderDatasetLoader =
+//                dynamic_cast<NCB::IRawObjectsOrderDatasetLoader*>(secondPassDatasetLoader.Get());
+//
+//            CB_ENSURE_INTERNAL(secondPassRawObjectsOrderDatasetLoader != nullptr,
+//                "Second loader cannot be converted to first loader format");
+        }
     }
 
 
