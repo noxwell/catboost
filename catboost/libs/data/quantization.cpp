@@ -109,28 +109,7 @@ namespace NCB {
             const TFeaturesArraySubsetIndexing& subsetIndexing,
             NPar::TLocalExecutor* localExecutor
         ) {
-            // non-incremental
-            TFeaturesArraySubsetIndexing composedIndexing = Compose(srcIndexing, subsetIndexing);
-
-            // convert to incremental
-            if (HoldsAlternative<TFullSubset<ui32>>(composedIndexing)) {
-                ComposedSubset = std::move(composedIndexing);
-            } else {
-                TVector<ui32> composedIndices;
-                composedIndices.yresize(composedIndexing.Size());
-                TArrayRef<ui32> composedIndicesRef = composedIndices;
-
-                composedIndexing.ParallelForEach(
-                    [=] (ui32 objectIdx, ui32 srcObjectIdx) {
-                        composedIndicesRef[objectIdx] = srcObjectIdx;
-                    },
-                    localExecutor
-                );
-
-                Sort(composedIndices);
-
-                ComposedSubset = TFeaturesArraySubsetIndexing(std::move(composedIndices));
-            }
+            ComposedSubset = MakeIncrementalIndexing(Compose(srcIndexing, subsetIndexing), localExecutor);
             InvertedSubset = GetInvertedIndexing(subsetIndexing, srcIndexing.Size(), localExecutor);
         }
     };
@@ -2617,6 +2596,36 @@ namespace NCB {
         TRestorableFastRng64* rand,
         const TInitialBorders& initialBorders) {
 
+        TQuantizationOptions quantizationOptions =
+            ConstructQuantizationOptions(params, srcData.Get()->MetaInfo, bordersFile, quantizedFeaturesInfo);
+
+        TRawObjectsDataProviderPtr rawObjectsDataProvider(
+            dynamic_cast<TRawObjectsDataProvider*>(srcData->ObjectsData.Get()));
+        Y_VERIFY(rawObjectsDataProvider);
+
+        if (srcData->RefCount() <= 1) {
+            // can clean up
+            auto dummy = srcData->ObjectsData.Release();
+            Y_UNUSED(dummy);
+        }
+
+        return Quantize(
+            quantizationOptions,
+            std::move(rawObjectsDataProvider),
+            quantizedFeaturesInfo,
+            rand,
+            localExecutor,
+            initialBorders
+        );
+    }
+
+
+    TQuantizationOptions ConstructQuantizationOptions(
+        const NCatboostOptions::TCatBoostOptions& params,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+    ) {
         TQuantizationOptions quantizationOptions;
         quantizationOptions.GroupFeaturesForCpu = params.DataProcessingOptions->DevGroupFeatures.GetUnchecked();
         if (params.GetTaskType() == ETaskType::CPU) {
@@ -2655,7 +2664,7 @@ namespace NCB {
 
         if (!quantizedFeaturesInfo) {
             quantizedFeaturesInfo = MakeIntrusive<TQuantizedFeaturesInfo>(
-                *srcData->MetaInfo.FeaturesLayout,
+                *metaInfo.FeaturesLayout,
                 params.DataProcessingOptions->IgnoredFeatures.Get(),
                 params.DataProcessingOptions->FloatFeaturesBinarization.Get(),
                 params.DataProcessingOptions->PerFloatFeatureQuantization.Get(),
@@ -2670,24 +2679,23 @@ namespace NCB {
             }
         }
 
-        TRawObjectsDataProviderPtr rawObjectsDataProvider(
-            dynamic_cast<TRawObjectsDataProvider*>(srcData->ObjectsData.Get()));
-        Y_VERIFY(rawObjectsDataProvider);
+        return quantizationOptions;
+    }
 
-        if (srcData->RefCount() <= 1) {
-            // can clean up
-            auto dummy = srcData->ObjectsData.Release();
-            Y_UNUSED(dummy);
-        }
 
-        return Quantize(
-            quantizationOptions,
-            std::move(rawObjectsDataProvider),
-            quantizedFeaturesInfo,
-            rand,
-            localExecutor,
-            initialBorders
-        );
+    TQuantizationOptions ConstructQuantizationOptions(
+        NJson::TJsonValue plainJsonParams,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+    ) {
+        NJson::TJsonValue jsonParams;
+        NJson::TJsonValue outputJsonParams;
+        ConvertIgnoredFeaturesFromStringToIndices(metaInfo, &plainJsonParams);
+        NCatboostOptions::PlainJsonToOptions(plainJsonParams, &jsonParams, &outputJsonParams);
+        NCatboostOptions::TCatBoostOptions catBoostOptions(NCatboostOptions::LoadOptions(jsonParams));
+
+        return ConstructQuantizationOptions(catBoostOptions, metaInfo, bordersFile, quantizedFeaturesInfo);
     }
 
 

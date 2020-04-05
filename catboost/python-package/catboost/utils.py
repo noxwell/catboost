@@ -1,4 +1,4 @@
-from .core import Pool, CatBoostError, get_catboost_bin_module, ARRAY_TYPES
+from .core import Pool, CatBoostError, get_catboost_bin_module, ARRAY_TYPES, STRING_TYPES, _update_params_quantize_part, _process_synonyms
 from collections import defaultdict
 from contextlib import contextmanager
 import numpy as np
@@ -479,3 +479,50 @@ def select_threshold(model=None, data=None, curve=None, FPR=None, FNR=None, thre
     else:
         raise CatBoostError('One of the parameters data and curve should be set.')
 
+
+def quantize(
+        data_path,
+        column_description=None,
+        pairs=None,
+        delimiter='\t',
+        has_header=False,
+        feature_names=None,
+        thread_count=-1,
+        ignored_features=None,
+        per_float_feature_quantization=None,
+        border_count=None,
+        max_bin=None,
+        feature_border_type=None,
+        sparse_features_conflict_fraction=None,
+        dev_efb_max_buckets=None,
+        nan_mode=None,
+        input_borders=None,
+        task_type=None,
+        used_ram_limit=None
+):
+    if not data_path:
+        raise CatBoostError("Data filename is empty.")
+    if not isinstance(data_path, STRING_TYPES):
+        raise CatBoostError("Data filename should be string type.")
+
+    if pairs is not None and not isinstance(pairs, STRING_TYPES):
+        raise CatBoostError("pairs should have None or string type when the pool is read from the file.")
+    if column_description is not None and not isinstance(column_description, STRING_TYPES):
+        raise CatBoostError("column_description should have None or string type when the pool is read from the file.")
+    if feature_names is not None and not isinstance(feature_names, STRING_TYPES):
+        raise CatBoostError("feature_names should have None or string type when the pool is read from the file.")
+
+    params = {}
+    _process_synonyms(params)
+
+    if border_count is None:
+        border_count = max_bin
+
+    _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
+                                 feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
+                                 nan_mode, input_borders, task_type, used_ram_limit)
+
+    result = Pool(None)
+    result._read(data_path, column_description, pairs, feature_names, delimiter, params, has_header, thread_count)
+
+    return result

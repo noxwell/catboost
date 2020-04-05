@@ -139,6 +139,20 @@ namespace NCB {
         const TInitialBorders& initialBorders = Nothing()
     );
 
+    TQuantizationOptions ConstructQuantizationOptions(
+        const NCatboostOptions::TCatBoostOptions& params,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+    );
+
+    TQuantizationOptions ConstructQuantizationOptions(
+        NJson::TJsonValue plainJsonParams,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+    );
+
     TQuantizedObjectsDataProviderPtr ConstructQuantizedPoolFromRawPool(
         TDataProviderPtr pool,
         NJson::TJsonValue plainJsonParams,

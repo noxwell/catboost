@@ -23,6 +23,7 @@ SRCS(
     lazy_columns.cpp
     GLOBAL libsvm_loader.cpp
     load_data.cpp
+    load_and_quantize_data.cpp
     loader.cpp
     meta_info.cpp
     model_dataset_compatibility.cpp
