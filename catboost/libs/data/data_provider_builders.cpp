@@ -1717,9 +1717,6 @@ namespace NCB {
                     metaInfo.Type == EFeatureType::Float,
                     "quantization schema's feature type for feature " LabeledOutput(flatFeatureIdx)
                     << " (float) is inconsistent with features layout");
-                if (!metaInfo.IsAvailable) {
-                    continue;
-                }
 
                 const auto typedFeatureIdx = featuresLayout.GetInternalFeatureIdx<EFeatureType::Float>(
                     flatFeatureIdx);
