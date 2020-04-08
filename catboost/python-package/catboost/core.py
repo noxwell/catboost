@@ -217,7 +217,7 @@ def _get_features_indices(features, feature_names):
 
 def _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                  feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                 nan_mode, input_borders, task_type, used_ram_limit):
+                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed):
     if ignored_features is not None:
         params.update({
             'ignored_features': ignored_features
@@ -266,6 +266,11 @@ def _update_params_quantize_part(params, ignored_features, per_float_feature_qua
     if used_ram_limit is not None:
         params.update({
             'used_ram_limit': used_ram_limit
+        })
+
+    if random_seed is not None:
+        params.update({
+            'random_seed': random_seed
         })
 
     return params
@@ -729,7 +734,7 @@ class Pool(_PoolBase):
 
     def quantize(self, ignored_features=None, per_float_feature_quantization=None, border_count=None,
                  max_bin=None, feature_border_type=None, sparse_features_conflict_fraction=None, dev_efb_max_buckets=None,
-                 nan_mode=None, input_borders=None, task_type=None, used_ram_limit=None):
+                 nan_mode=None, input_borders=None, task_type=None, used_ram_limit=None, random_seed=None):
         """
         Quantize this pool
 
@@ -791,6 +796,10 @@ class Pool(_PoolBase):
                 - 'GPU'
 
         used_ram_limit=None
+
+        random_seed : int, [default=None]
+            The random seed used for data sampling.
+            If None, 0 is used.
         """
         if self.is_quantized():
             raise CatBoostError('Pool is already quantized')
@@ -803,7 +812,7 @@ class Pool(_PoolBase):
 
         _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                      feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                     nan_mode, input_borders, task_type, used_ram_limit)
+                                     nan_mode, input_borders, task_type, used_ram_limit, random_seed)
 
         self._quantize(params)
 
