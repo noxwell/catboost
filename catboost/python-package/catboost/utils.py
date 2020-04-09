@@ -503,6 +503,115 @@ def quantize(
         max_subset_size=None,
         block_size=None
 ):
+    """
+    Construct quantized Pool from non-quantized pool stored in file.
+    This method is optimized for memory usage, so it can be used to read huge dataset,
+    which fits memory only when quantized.
+
+    Parameters
+    ----------
+    data : list or numpy.ndarray or pandas.DataFrame or pandas.Series or FeaturesData or string
+        Data source of Pool.
+        If list or numpy.ndarrays or pandas.DataFrame or pandas.Series, giving 2 dimensional array like data.
+        If FeaturesData - see FeaturesData description for details, 'cat_features' and 'feature_names'
+          parameters must be equal to None in this case
+        If string, giving the path to the file with data in catboost format.
+          If path starts with "quantized://", the file has to contain quantized dataset saved with Pool.save().
+
+    column_description : string, optional (default=None)
+        ColumnsDescription parameter.
+        There are several columns description types: Label, Categ, Num, Auxiliary, DocId, Weight, Baseline, GroupId, Timestamp.
+        All columns are Num as default, it's not necessary to specify
+        this type of columns. Default Label column index is 0 (zero).
+        If None, Label column is 0 (zero) as default, all data columns are Num as default.
+        If string, giving the path to the file with ColumnsDescription in column_description format.
+
+    pairs : list or numpy.ndarray or pandas.DataFrame or string
+        The pairs description.
+        If list or numpy.ndarrays or pandas.DataFrame, giving 2 dimensional.
+        The shape should be Nx2, where N is the pairs' count. The first element of the pair is
+        the index of winner object in the training set. The second element of the pair is
+        the index of loser object in the training set.
+        If string, giving the path to the file with pairs description.
+
+    has_header : bool optional (default=False)
+        If True, read column names from first line.
+
+    feature_names : list or string, optional (default=None)
+        If list - list of names for each given data_feature.
+        If string - path with scheme for feature names data to load.
+        If this parameter is None and 'data' is pandas.DataFrame feature names will be initialized
+          from DataFrame's column names.
+        Must be None if 'data' parameter has FeaturesData type
+
+    thread_count : int, optional (default=-1)
+        Thread count for data processing.
+        If -1, then the number of threads is set to the number of CPU cores.
+
+    ignored_features : list, [default=None]
+            Indices or names of features that should be excluded when training.
+
+    per_float_feature_quantization : list of strings, [default=None]
+        List of float binarization descriptions.
+        Format : described in documentation on catboost.ai
+        Example 1: ['0:1024'] means that feature 0 will have 1024 borders.
+        Example 2: ['0:border_count=1024', '1:border_count=1024', ...] means that two first features have 1024 borders.
+        Example 3: ['0:nan_mode=Forbidden,border_count=32,border_type=GreedyLogSum',
+                    '1:nan_mode=Forbidden,border_count=32,border_type=GreedyLogSum'] - defines more quantization properties for first two features.
+
+    border_count : int, [default = 254 for training on CPU or 128 for training on GPU]
+        The number of partitions in numeric features binarization. Used in the preliminary calculation.
+        range: [1,65535] on CPU, [1,255] on GPU
+
+    max_bin : float, synonym for border_count.
+
+    feature_border_type : string, [default='GreedyLogSum']
+        The binarization mode in numeric features binarization. Used in the preliminary calculation.
+        Possible values:
+            - 'Median'
+            - 'Uniform'
+            - 'UniformAndQuantiles'
+            - 'GreedyLogSum'
+            - 'MaxLogSum'
+            - 'MinEntropy'
+
+    sparse_features_conflict_fraction : float, [default=0.0]
+        CPU only. Maximum allowed fraction of conflicting non-default values for features in exclusive features bundle.
+        Should be a real value in [0, 1) interval.
+
+    dev_efb_max_buckets : int, [default=1024]
+        CPU only. Maximum bucket count in exclusive features bundle. Should be in an integer between 0 and 65536.
+        Used only for learning speed tuning.
+
+    nan_mode : string, [default=None]
+        Way to process missing values for numeric features.
+        Possible values:
+            - 'Forbidden' - raises an exception if there is a missing value for a numeric feature in a dataset.
+            - 'Min' - each missing value will be processed as the minimum numerical value.
+            - 'Max' - each missing value will be processed as the maximum numerical value.
+        If None, then nan_mode=Min.
+
+    input_borders : string, [default=None]
+        input file with borders used in numeric features binarization.
+
+    task_type : string, [default=None]
+        The calcer type used to train the model.
+        Possible values:
+            - 'CPU'
+            - 'GPU'
+
+    used_ram_limit=None
+
+    random_seed : int, [default=None]
+        The random seed used for data sampling.
+        If None, 0 is used.
+
+    max_subset_size : int, [default=200000]
+        Maximum subset size for build borders algorithm
+
+    block_size : int, [default=10000]
+        Size of one data block for block reading algorithm
+    """
     if not data_path:
         raise CatBoostError("Data filename is empty.")
     if not isinstance(data_path, STRING_TYPES):
