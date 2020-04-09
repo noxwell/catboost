@@ -3440,11 +3440,11 @@ cdef class _PoolBase:
         cdef TQuantizedFeaturesInfoPtr quantizedFeaturesInfo
 
         if quantization_params is not None:
-            _input_borders = quantization_params.pop("input_borders", None)
+            input_borders = quantization_params.pop("input_borders", None)
             prep_params = _PreprocessParams(quantization_params)
 
-            if (_input_borders):
-                quantizedFeaturesInfo = _init_quantized_feature_info(self.__pool, _input_borders)
+            if (input_borders):
+                quantized_features_info = _init_quantized_feature_info(self.__pool, input_borders)
 
             self.__pool = ReadAndQuantizeDataset(
                 pool_file_path,
@@ -3457,7 +3457,7 @@ cdef class _PoolBase:
                 emptyIntVec,
                 EObjectsOrder_Undefined,
                 prep_params.tree,
-                quantizedFeaturesInfo,
+                quantized_features_info,
                 thread_count,
                 False
             )

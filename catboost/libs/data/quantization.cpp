@@ -2661,6 +2661,8 @@ namespace NCB {
         }
         quantizationOptions.CpuRamLimit
             = ParseMemorySizeDescription(params.SystemOptions->CpuUsedRamLimit.Get());
+        quantizationOptions.MaxSubsetSizeForBuildBordersAlgorithms =
+            params.DataProcessingOptions->FloatFeaturesBinarization->MaxSubsetSize.Get();
 
         if (!quantizedFeaturesInfo) {
             quantizedFeaturesInfo = MakeIntrusive<TQuantizedFeaturesInfo>(

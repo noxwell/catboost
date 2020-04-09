@@ -218,7 +218,9 @@ void NCatboostOptions::TCtrDescription::DisableRedundantFields() {
     } else {
         TargetBinarization->DisableNanModeOption();
     }
+    TargetBinarization->DisableMaxSubsetSizeOption();
     CtrBinarization->DisableNanModeOption();
+    CtrBinarization->DisableMaxSubsetSizeOption();
 }
 
 NCatboostOptions::TCatFeatureParams::TCatFeatureParams(ETaskType taskType)
@@ -234,6 +236,7 @@ NCatboostOptions::TCatFeatureParams::TCatFeatureParams(ETaskType taskType)
     , CtrLeafCountLimit("ctr_leaf_count_limit", Max<ui64>(), taskType)
     , CtrHistoryUnit("ctr_history_unit", ECtrHistoryUnit::Sample, taskType) {
     TargetBinarization.Get().DisableNanModeOption();
+    TargetBinarization.Get().DisableMaxSubsetSizeOption();
 }
 
 void NCatboostOptions::TCatFeatureParams::Load(const NJson::TJsonValue& options) {

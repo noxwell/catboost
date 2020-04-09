@@ -124,6 +124,7 @@
         "float_features_binarization": {
             "border_count": 254, 
             "border_type": "GreedyLogSum", 
+            "max_subset_size": 200000, 
             "nan_mode": "Min"
         }, 
         "has_time": false, 

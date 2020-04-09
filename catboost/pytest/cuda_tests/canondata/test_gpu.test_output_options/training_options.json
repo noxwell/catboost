@@ -146,6 +146,7 @@
         "target_border" : null,
         "dev_sparse_array_indexing" : "Indices",
         "float_features_binarization" : {
+            "max_subset_size" : 200000,
             "border_count" : 128,
             "nan_mode" : "Min",
             "border_type" : "GreedyLogSum"

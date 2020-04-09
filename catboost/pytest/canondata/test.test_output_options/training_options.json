@@ -140,6 +140,7 @@
         "dev_leafwise_scoring" : false,
         "dev_sparse_array_indexing" : "Indices",
         "float_features_binarization" : {
+            "max_subset_size" : 200000,
             "border_count" : 254,
             "nan_mode" : "Min",
             "border_type" : "GreedyLogSum"

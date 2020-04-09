@@ -28,6 +28,7 @@
     "loss_function": "RMSE", 
     "max_ctr_complexity": 1, 
     "max_leaves": 64, 
+    "max_subset_size": 200000, 
     "min_data_in_leaf": 1, 
     "model_shrink_mode": "Constant", 
     "model_shrink_rate": 0, 

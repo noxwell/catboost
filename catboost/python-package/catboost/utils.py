@@ -499,7 +499,8 @@ def quantize(
         input_borders=None,
         task_type=None,
         used_ram_limit=None,
-        random_seed=None
+        random_seed=None,
+        max_subset_size=None
 ):
     if not data_path:
         raise CatBoostError("Data filename is empty.")
@@ -521,7 +522,7 @@ def quantize(
 
     _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                  feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed)
+                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed, max_subset_size)
 
     result = Pool(None)
     result._read(data_path, column_description, pairs, feature_names, delimiter, params, has_header, thread_count)
