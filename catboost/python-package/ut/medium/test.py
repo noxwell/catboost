@@ -27,7 +27,7 @@ from catboost import (
     to_regressor,
     to_classifier,)
 from catboost.eval.catboost_evaluation import CatboostEvaluation, EvalType
-from catboost.utils import eval_metric, create_cd, read_cd, get_roc_curve, select_threshold
+from catboost.utils import eval_metric, create_cd, read_cd, get_roc_curve, select_threshold, quantize
 from catboost.utils import DataMetaInfo, TargetStats, compute_training_options
 import os.path
 import os
@@ -7656,3 +7656,47 @@ def test_penalties_coefficient_work():
 
     assert any(model_without_feature_penalties.predict_proba(pool)[0] == model_with_zero_feature_penalties.predict_proba(pool)[0])
     assert any(model_without_feature_penalties.predict_proba(pool)[0] != model_with_feature_penalties.predict_proba(pool)[0])
+
+
+def test_pool_load_and_quantize():
+    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+    quantized_pool.quantize()
+
+    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+
+    assert quantized_on_load_pool.is_quantized()
+    assert quantized_pool == quantized_on_load_pool
+
+
+def test_pool_load_and_quantize_small_subset():
+    SUBSET_SIZE = 100
+
+    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+    assert SUBSET_SIZE < quantized_pool.num_row()
+    quantized_pool.quantize(max_subset_size=SUBSET_SIZE)
+
+    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
+                                      max_subset_size=SUBSET_SIZE)
+
+    quantized_on_load_pool_other = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
+                                            max_subset_size=SUBSET_SIZE + 1)
+
+    assert quantized_on_load_pool.is_quantized()
+    assert quantized_pool == quantized_on_load_pool
+    assert quantized_pool != quantized_on_load_pool_other
+
+
+def test_pool_load_and_quantize_small_block_small_subset():
+    BLOCK_SIZE = 500
+    SUBSET_SIZE = 100
+
+    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+    assert SUBSET_SIZE < quantized_pool.num_row()
+    assert BLOCK_SIZE < quantized_pool.num_row()
+    quantized_pool.quantize(max_subset_size=SUBSET_SIZE)
+
+    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
+                                      max_subset_size=SUBSET_SIZE, block_size=BLOCK_SIZE)
+
+    assert quantized_on_load_pool.is_quantized()
+    assert quantized_pool == quantized_on_load_pool
