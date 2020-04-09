@@ -675,11 +675,14 @@ namespace NCB {
         const TVector<ui32>& ignoredFeatures,
         EObjectsOrder objectsOrder,
         NJson::TJsonValue plainJsonParams,
+        TMaybe<ui32> blockSize,
         TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
         TDatasetSubset loadSubset,
         TMaybe<TVector<NJson::TJsonValue>*> classLabels,
         NPar::TLocalExecutor* localExecutor) {
-        const ui32 BLOCK_SIZE = 10000;
+        if (!blockSize) {
+            blockSize = 10000;
+        }
 
         TVector<NJson::TJsonValue> emptyClassLabels;
         CB_ENSURE_INTERNAL(
@@ -704,7 +707,7 @@ namespace NCB {
                                                             MakeCdProviderFromFile(columnarPoolFormatParams.CdFilePath),
                                                             ignoredFeatures,
                                                             objectsOrder,
-                                                            BLOCK_SIZE,
+                                                            *blockSize,
                                                             loadSubset,
                                                             localExecutor}});
 
@@ -745,7 +748,7 @@ namespace NCB {
         params.ClassLabels = **classLabels;
         ReadAndProceedPoolInBlocks(
             params,
-            BLOCK_SIZE,
+            *blockSize,
             [&](TDataProviderPtr dataBlock) { secondPassQuantizer.ProcessBlock(std::move(dataBlock)); },
             localExecutor);
 
@@ -763,6 +766,7 @@ namespace NCB {
         const TVector<ui32>& ignoredFeatures,
         EObjectsOrder objectsOrder,
         NJson::TJsonValue plainJsonParams,
+        TMaybe<ui32> blockSize,
         TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
         int threadCount,
         bool verbose,
@@ -783,6 +787,7 @@ namespace NCB {
             ignoredFeatures,
             objectsOrder,
             std::move(plainJsonParams),
+            blockSize,
             std::move(quantizedFeaturesInfo),
             TDatasetSubset::MakeColumns(),
             classLabels,

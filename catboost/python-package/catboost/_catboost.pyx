@@ -868,6 +868,7 @@ cdef extern from "catboost/libs/data/load_and_quantize_data.h" namespace "NCB":
         const TVector[ui32]& ignoredFeatures,
         EObjectsOrder objectsOrder,
         TJsonValue plainJsonParams,
+        TMaybe[ui32] blockSize,
         TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
         int threadCount,
         bool_t verbose
@@ -3441,6 +3442,7 @@ cdef class _PoolBase:
 
         if quantization_params is not None:
             input_borders = quantization_params.pop("input_borders", None)
+            block_size = quantization_params.pop("block_size", None)
             prep_params = _PreprocessParams(quantization_params)
 
             if (input_borders):
@@ -3457,6 +3459,7 @@ cdef class _PoolBase:
                 emptyIntVec,
                 EObjectsOrder_Undefined,
                 prep_params.tree,
+                block_size,
                 quantized_features_info,
                 thread_count,
                 False

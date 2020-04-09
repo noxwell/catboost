@@ -500,7 +500,8 @@ def quantize(
         task_type=None,
         used_ram_limit=None,
         random_seed=None,
-        max_subset_size=None
+        max_subset_size=None,
+        block_size=None
 ):
     if not data_path:
         raise CatBoostError("Data filename is empty.")
@@ -519,6 +520,9 @@ def quantize(
 
     if border_count is None:
         border_count = max_bin
+
+    if block_size is not None:
+        params['block_size'] = block_size
 
     _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                  feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
