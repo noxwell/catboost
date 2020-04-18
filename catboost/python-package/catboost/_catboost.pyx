@@ -3442,7 +3442,7 @@ cdef class _PoolBase:
 
         if quantization_params is not None:
             input_borders = quantization_params.pop("input_borders", None)
-            block_size = quantization_params.pop("block_size", None)
+            block_size = quantization_params.pop("dev_block_size", None)
             prep_params = _PreprocessParams(quantization_params)
 
             if input_borders:

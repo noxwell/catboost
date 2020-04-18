@@ -498,8 +498,7 @@ def quantize(
     task_type=None,
     used_ram_limit=None,
     random_seed=None,
-    max_subset_size=None,
-    block_size=None
+    **kwargs
 ):
     """
     Construct quantized Pool from non-quantized pool stored in file.
@@ -582,12 +581,6 @@ def quantize(
         The random seed used for data sampling.
         If None, 0 is used.
 
-    max_subset_size : int, [default=200000]
-        Maximum subset size for build borders algorithm
-
-    block_size : int, [default=10000]
-        Size of one data block for block reading algorithm
-
     Returns
     -------
     pool : Pool
@@ -611,8 +604,10 @@ def quantize(
     if border_count is None:
         border_count = max_bin
 
-    if block_size is not None:
-        params['block_size'] = block_size
+    if 'dev_block_size' in kwargs:
+        params['dev_block_size'] = kwargs['dev_block_size']
+
+    dev_max_subset_size_for_build_borders = kwargs.get('dev_max_subset_size_for_build_borders')
 
     _update_params_quantize_part(
         params,
@@ -627,7 +622,7 @@ def quantize(
         task_type,
         used_ram_limit,
         random_seed,
-        max_subset_size)
+        dev_max_subset_size_for_build_borders)
 
     result = Pool(None)
     result._read(data_path, column_description, pairs, feature_names, delimiter, has_header, thread_count, params)

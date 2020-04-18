@@ -20,7 +20,7 @@ namespace NCatboostOptions {
         );
 
         void DisableNanModeOption();
-        void DisableMaxSubsetSizeOption();
+        void DisableMaxSubsetSizeForBuildBordersOption();
 
         bool operator==(const TBinarizationOptions& rhs) const;
         bool operator!=(const TBinarizationOptions& rhs) const;
@@ -36,7 +36,7 @@ namespace NCatboostOptions {
         TOption<EBorderSelectionType> BorderSelectionType;
         TOption<ui32> BorderCount;
         TOption<ENanMode> NanMode;
-        TOption<ui32> MaxSubsetSize;
+        TOption<ui32> MaxSubsetSizeForBuildBorders;
     };
     std::pair<TStringBuf, NJson::TJsonValue> ParsePerFeatureBinarization(TStringBuf description);
 }

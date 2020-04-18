@@ -217,7 +217,8 @@ def _get_features_indices(features, feature_names):
 
 def _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                  feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed, max_subset_size):
+                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed,
+                                 dev_max_subset_size_for_build_borders):
     if ignored_features is not None:
         params.update({
             'ignored_features': ignored_features
@@ -273,9 +274,9 @@ def _update_params_quantize_part(params, ignored_features, per_float_feature_qua
             'random_seed': random_seed
         })
 
-    if max_subset_size is not None:
+    if dev_max_subset_size_for_build_borders is not None:
         params.update({
-            'max_subset_size': max_subset_size
+            'dev_max_subset_size_for_build_borders': dev_max_subset_size_for_build_borders
         })
 
     return params
@@ -738,9 +739,8 @@ class Pool(_PoolBase):
         self._save(fname)
 
     def quantize(self, ignored_features=None, per_float_feature_quantization=None, border_count=None,
-                 max_bin=None, feature_border_type=None, sparse_features_conflict_fraction=None, dev_efb_max_buckets=None,
-                 nan_mode=None, input_borders=None, task_type=None, used_ram_limit=None, random_seed=None,
-                 max_subset_size=None):
+                 max_bin=None, feature_border_type=None, sparse_features_conflict_fraction=None,
+                 nan_mode=None, input_borders=None, task_type=None, used_ram_limit=None, random_seed=None, **kwargs):
         """
         Quantize this pool
 
@@ -780,10 +780,6 @@ class Pool(_PoolBase):
             CPU only. Maximum allowed fraction of conflicting non-default values for features in exclusive features bundle.
             Should be a real value in [0, 1) interval.
 
-        dev_efb_max_buckets : int, [default=1024]
-            CPU only. Maximum bucket count in exclusive features bundle. Should be in an integer between 0 and 65536.
-            Used only for learning speed tuning.
-
         nan_mode : string, [default=None]
             Way to process missing values for numeric features.
             Possible values:
@@ -806,9 +802,6 @@ class Pool(_PoolBase):
         random_seed : int, [default=None]
             The random seed used for data sampling.
             If None, 0 is used.
-
-        max_subset_size : int, [default=200000]
-            Maximum subset size for build borders algorithm
         """
         if self.is_quantized():
             raise CatBoostError('Pool is already quantized')
@@ -819,9 +812,13 @@ class Pool(_PoolBase):
         if border_count is None:
             border_count = max_bin
 
+        dev_efb_max_buckets = kwargs.get('dev_efb_max_buckets')
+        dev_max_subset_size_for_build_borders = kwargs.get('dev_max_subset_size_for_build_borders')
+
         _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                      feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                     nan_mode, input_borders, task_type, used_ram_limit, random_seed, max_subset_size)
+                                     nan_mode, input_borders, task_type, used_ram_limit, random_seed,
+                                     dev_max_subset_size_for_build_borders)
 
         self._quantize(params)
 

@@ -1247,10 +1247,10 @@ static void BindBinarizationParams(NLastGetopt::TOpts* parserPtr, NJson::TJsonVa
             (*plainJsonPtr)["nan_mode"] = ToString(nanMode);
         });
 
-    parser.AddLongOption("max-subset-size", "Maximum size of subset for build borders algorithm. Default: 200000")
+    parser.AddLongOption("dev-max-subset-size-for-build-borders", "Maximum size of subset for build borders algorithm. Default: 200000")
         .RequiredArgument("int")
-        .Handler1T<int>([plainJsonPtr](const int maxSubsetSize) {
-          (*plainJsonPtr)["max_subset_size"] = maxSubsetSize;
+        .Handler1T<int>([plainJsonPtr](const int maxSubsetSizeForBuildBorders) {
+          (*plainJsonPtr)["dev_max_subset_size_for_build_borders"] = maxSubsetSizeForBuildBorders;
         });
 }
 

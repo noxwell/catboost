@@ -7673,13 +7673,17 @@ def test_pool_load_and_quantize_small_subset():
 
     quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
     assert SUBSET_SIZE < quantized_pool.num_row()
-    quantized_pool.quantize(max_subset_size=SUBSET_SIZE)
+    quantized_pool.quantize(dev_max_subset_size_for_build_borders=SUBSET_SIZE)
 
-    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
-                                      max_subset_size=SUBSET_SIZE)
+    quantized_on_load_pool = quantize(
+        QUERYWISE_TRAIN_FILE,
+        column_description=QUERYWISE_CD_FILE,
+        dev_max_subset_size_for_build_borders=SUBSET_SIZE)
 
-    quantized_on_load_pool_other = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
-                                            max_subset_size=SUBSET_SIZE + 1)
+    quantized_on_load_pool_other = quantize(
+        QUERYWISE_TRAIN_FILE,
+        column_description=QUERYWISE_CD_FILE,
+        dev_max_subset_size_for_build_borders=SUBSET_SIZE + 1)
 
     assert quantized_on_load_pool.is_quantized()
     assert quantized_pool == quantized_on_load_pool
@@ -7693,10 +7697,13 @@ def test_pool_load_and_quantize_small_block_small_subset():
     quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
     assert SUBSET_SIZE < quantized_pool.num_row()
     assert BLOCK_SIZE < quantized_pool.num_row()
-    quantized_pool.quantize(max_subset_size=SUBSET_SIZE)
+    quantized_pool.quantize(dev_max_subset_size_for_build_borders=SUBSET_SIZE)
 
-    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE,
-                                      max_subset_size=SUBSET_SIZE, block_size=BLOCK_SIZE)
+    quantized_on_load_pool = quantize(
+        QUERYWISE_TRAIN_FILE,
+        column_description=QUERYWISE_CD_FILE,
+        dev_max_subset_size_for_build_borders=SUBSET_SIZE,
+        dev_block_size=BLOCK_SIZE)
 
     assert quantized_on_load_pool.is_quantized()
     assert quantized_pool == quantized_on_load_pool
