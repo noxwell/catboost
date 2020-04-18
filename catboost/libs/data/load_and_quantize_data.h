@@ -2,24 +2,26 @@
 
 #include "data_provider.h"
 #include "loader.h"
-#include "objects.h"
+#include "order.h"
+#include "quantized_features_info.h"
 
-#include <catboost/private/libs/data_util/path_with_scheme.h>
-#include <catboost/private/libs/options/load_options.h>
+#include <library/json/json_value.h>
 
-#include <library/threading/local_executor/local_executor.h>
-
+#include <util/generic/fwd.h>
 #include <util/generic/maybe.h>
-#include <util/generic/vector.h>
 #include <util/system/types.h>
 
-
-namespace NJson {
-    class TJsonValue;
+namespace NCatboostOptions {
+    struct TColumnarPoolFormatParams;
 }
 
+namespace NPar {
+    class TLocalExecutor;
+}
 
 namespace NCB {
+    struct TPathWithScheme;
+
     // use from C++ code
     TDataProviderPtr ReadAndQuantizeDataset(
         const TPathWithScheme& poolPath,

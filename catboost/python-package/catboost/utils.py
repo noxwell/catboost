@@ -481,44 +481,37 @@ def select_threshold(model=None, data=None, curve=None, FPR=None, FNR=None, thre
 
 
 def quantize(
-        data_path,
-        column_description=None,
-        pairs=None,
-        delimiter='\t',
-        has_header=False,
-        feature_names=None,
-        thread_count=-1,
-        ignored_features=None,
-        per_float_feature_quantization=None,
-        border_count=None,
-        max_bin=None,
-        feature_border_type=None,
-        sparse_features_conflict_fraction=None,
-        dev_efb_max_buckets=None,
-        nan_mode=None,
-        input_borders=None,
-        task_type=None,
-        used_ram_limit=None,
-        random_seed=None,
-        max_subset_size=None,
-        block_size=None
+    data_path,
+    column_description=None,
+    pairs=None,
+    delimiter='\t',
+    has_header=False,
+    feature_names=None,
+    thread_count=-1,
+    ignored_features=None,
+    per_float_feature_quantization=None,
+    border_count=None,
+    max_bin=None,
+    feature_border_type=None,
+    nan_mode=None,
+    input_borders=None,
+    task_type=None,
+    used_ram_limit=None,
+    random_seed=None,
+    max_subset_size=None,
+    block_size=None
 ):
     """
     Construct quantized Pool from non-quantized pool stored in file.
-    This method is optimized for memory usage, so it can be used to read huge dataset,
-    which fits memory only when quantized.
+    This method does not load whole non-quantized source dataset into memory
+    so it can be used for huge datasets that fit in memory only after quantization.
 
     Parameters
     ----------
-    data : list or numpy.ndarray or pandas.DataFrame or pandas.Series or FeaturesData or string
-        Data source of Pool.
-        If list or numpy.ndarrays or pandas.DataFrame or pandas.Series, giving 2 dimensional array like data.
-        If FeaturesData - see FeaturesData description for details, 'cat_features' and 'feature_names'
-          parameters must be equal to None in this case
-        If string, giving the path to the file with data in catboost format.
-          If path starts with "quantized://", the file has to contain quantized dataset saved with Pool.save().
+    data : string
+        Path (with optional scheme) to the file with non-quantized data.
 
-    column_description : string, optional (default=None)
+    column_description : string, [default=None]
         ColumnsDescription parameter.
         There are several columns description types: Label, Categ, Num, Auxiliary, DocId, Weight, Baseline, GroupId, Timestamp.
         All columns are Num as default, it's not necessary to specify
@@ -526,30 +519,21 @@ def quantize(
         If None, Label column is 0 (zero) as default, all data columns are Num as default.
         If string, giving the path to the file with ColumnsDescription in column_description format.
 
-    pairs : list or numpy.ndarray or pandas.DataFrame or string
-        The pairs description.
-        If list or numpy.ndarrays or pandas.DataFrame, giving 2 dimensional.
-        The shape should be Nx2, where N is the pairs' count. The first element of the pair is
-        the index of winner object in the training set. The second element of the pair is
-        the index of loser object in the training set.
-        If string, giving the path to the file with pairs description.
+    pairs : string, [default=None]
+        Path to the file with pairs description.
 
-    has_header : bool optional (default=False)
+    has_header : bool, [default=False]
         If True, read column names from first line.
 
-    feature_names : list or string, optional (default=None)
-        If list - list of names for each given data_feature.
-        If string - path with scheme for feature names data to load.
-        If this parameter is None and 'data' is pandas.DataFrame feature names will be initialized
-          from DataFrame's column names.
-        Must be None if 'data' parameter has FeaturesData type
+    feature_names : string, [default=None]
+        Path with scheme for feature names data to load.
 
-    thread_count : int, optional (default=-1)
+    thread_count : int, [default=-1]
         Thread count for data processing.
         If -1, then the number of threads is set to the number of CPU cores.
 
     ignored_features : list, [default=None]
-            Indices or names of features that should be excluded when training.
+        Indices or names of features that should be excluded when training.
 
     per_float_feature_quantization : list of strings, [default=None]
         List of float binarization descriptions.
@@ -574,14 +558,6 @@ def quantize(
             - 'GreedyLogSum'
             - 'MaxLogSum'
             - 'MinEntropy'
-
-    sparse_features_conflict_fraction : float, [default=0.0]
-        CPU only. Maximum allowed fraction of conflicting non-default values for features in exclusive features bundle.
-        Should be a real value in [0, 1) interval.
-
-    dev_efb_max_buckets : int, [default=1024]
-        CPU only. Maximum bucket count in exclusive features bundle. Should be in an integer between 0 and 65536.
-        Used only for learning speed tuning.
 
     nan_mode : string, [default=None]
         Way to process missing values for numeric features.
@@ -611,6 +587,11 @@ def quantize(
 
     block_size : int, [default=10000]
         Size of one data block for block reading algorithm
+
+    Returns
+    -------
+    pool : Pool
+        Constructed and quantized pool.
     """
     if not data_path:
         raise CatBoostError("Data filename is empty.")
@@ -633,11 +614,22 @@ def quantize(
     if block_size is not None:
         params['block_size'] = block_size
 
-    _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
-                                 feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
-                                 nan_mode, input_borders, task_type, used_ram_limit, random_seed, max_subset_size)
+    _update_params_quantize_part(
+        params,
+        ignored_features,
+        per_float_feature_quantization,
+        border_count,
+        feature_border_type,
+        None, # sparse_features_conflict_fraction
+        None, # dev_efb_max_buckets
+        nan_mode,
+        input_borders,
+        task_type,
+        used_ram_limit,
+        random_seed,
+        max_subset_size)
 
     result = Pool(None)
-    result._read(data_path, column_description, pairs, feature_names, delimiter, params, has_header, thread_count)
+    result._read(data_path, column_description, pairs, feature_names, delimiter, has_header, thread_count, params)
 
     return result

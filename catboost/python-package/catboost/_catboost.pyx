@@ -3445,7 +3445,7 @@ cdef class _PoolBase:
             block_size = quantization_params.pop("block_size", None)
             prep_params = _PreprocessParams(quantization_params)
 
-            if (input_borders):
+            if input_borders:
                 quantized_features_info = _init_quantized_feature_info(self.__pool, input_borders)
 
             self.__pool = ReadAndQuantizeDataset(

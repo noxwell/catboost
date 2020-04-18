@@ -2596,8 +2596,13 @@ namespace NCB {
         TRestorableFastRng64* rand,
         const TInitialBorders& initialBorders) {
 
-        TQuantizationOptions quantizationOptions =
-            ConstructQuantizationOptions(params, srcData.Get()->MetaInfo, bordersFile, quantizedFeaturesInfo);
+        TQuantizationOptions quantizationOptions;
+        PrepareQuantizationParameters(
+            params,
+            srcData->MetaInfo,
+            bordersFile,
+            &quantizationOptions,
+            &quantizedFeaturesInfo);
 
         TRawObjectsDataProviderPtr rawObjectsDataProvider(
             dynamic_cast<TRawObjectsDataProvider*>(srcData->ObjectsData.Get()));
@@ -2620,19 +2625,19 @@ namespace NCB {
     }
 
 
-    TQuantizationOptions ConstructQuantizationOptions(
+    void PrepareQuantizationParameters(
         const NCatboostOptions::TCatBoostOptions& params,
         const TDataMetaInfo& metaInfo,
         const TMaybe<TString>& bordersFile,
-        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+        TQuantizationOptions* quantizationOptions,
+        TQuantizedFeaturesInfoPtr* quantizedFeaturesInfo
     ) {
-        TQuantizationOptions quantizationOptions;
-        quantizationOptions.GroupFeaturesForCpu = params.DataProcessingOptions->DevGroupFeatures.GetUnchecked();
+        quantizationOptions->GroupFeaturesForCpu = params.DataProcessingOptions->DevGroupFeatures.GetUnchecked();
         if (params.GetTaskType() == ETaskType::CPU) {
 
-            quantizationOptions.ExclusiveFeaturesBundlingOptions.MaxBuckets
+            quantizationOptions->ExclusiveFeaturesBundlingOptions.MaxBuckets
                 = params.ObliviousTreeOptions->DevExclusiveFeaturesBundleMaxBuckets.Get();
-            quantizationOptions.ExclusiveFeaturesBundlingOptions.MaxConflictFraction
+            quantizationOptions->ExclusiveFeaturesBundlingOptions.MaxConflictFraction
                 = params.ObliviousTreeOptions->SparseFeaturesConflictFraction.Get();
 
             /* TODO(akhropov): Enable when sparse column scoring is supported
@@ -2649,23 +2654,23 @@ namespace NCB {
         } else {
             Y_ASSERT(params.GetTaskType() == ETaskType::GPU);
 
-            quantizationOptions.CpuCompatibleFormat = true;
+            quantizationOptions->CpuCompatibleFormat = true;
 
-            quantizationOptions.BundleExclusiveFeatures = true;
-            quantizationOptions.ExclusiveFeaturesBundlingOptions.MaxBuckets = Min<ui32>(
+            quantizationOptions->BundleExclusiveFeatures = true;
+            quantizationOptions->ExclusiveFeaturesBundlingOptions.MaxBuckets = Min<ui32>(
                 254, params.ObliviousTreeOptions->DevExclusiveFeaturesBundleMaxBuckets.Get());
-            quantizationOptions.ExclusiveFeaturesBundlingOptions.OnlyOneHotsAndBinaryFloats = true;
+            quantizationOptions->ExclusiveFeaturesBundlingOptions.OnlyOneHotsAndBinaryFloats = true;
 
-            quantizationOptions.PackBinaryFeaturesForCpu = false;
-            quantizationOptions.GroupFeaturesForCpu = false;
+            quantizationOptions->PackBinaryFeaturesForCpu = false;
+            quantizationOptions->GroupFeaturesForCpu = false;
         }
-        quantizationOptions.CpuRamLimit
+        quantizationOptions->CpuRamLimit
             = ParseMemorySizeDescription(params.SystemOptions->CpuUsedRamLimit.Get());
-        quantizationOptions.MaxSubsetSizeForBuildBordersAlgorithms =
+        quantizationOptions->MaxSubsetSizeForBuildBordersAlgorithms =
             params.DataProcessingOptions->FloatFeaturesBinarization->MaxSubsetSize.Get();
 
-        if (!quantizedFeaturesInfo) {
-            quantizedFeaturesInfo = MakeIntrusive<TQuantizedFeaturesInfo>(
+        if (quantizedFeaturesInfo && !(*quantizedFeaturesInfo)) {
+            *quantizedFeaturesInfo = MakeIntrusive<TQuantizedFeaturesInfo>(
                 *metaInfo.FeaturesLayout,
                 params.DataProcessingOptions->IgnoredFeatures.Get(),
                 params.DataProcessingOptions->FloatFeaturesBinarization.Get(),
@@ -2677,19 +2682,18 @@ namespace NCB {
             if (bordersFile) {
                 LoadBordersAndNanModesFromFromFileInMatrixnetFormat(
                     *bordersFile,
-                    quantizedFeaturesInfo.Get());
+                    quantizedFeaturesInfo->Get());
             }
         }
-
-        return quantizationOptions;
     }
 
 
-    TQuantizationOptions ConstructQuantizationOptions(
+    void PrepareQuantizationParameters(
         NJson::TJsonValue plainJsonParams,
         const TDataMetaInfo& metaInfo,
         const TMaybe<TString>& bordersFile,
-        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
+        TQuantizationOptions* quantizationOptions,
+        TQuantizedFeaturesInfoPtr* quantizedFeaturesInfo
     ) {
         NJson::TJsonValue jsonParams;
         NJson::TJsonValue outputJsonParams;
@@ -2697,7 +2701,12 @@ namespace NCB {
         NCatboostOptions::PlainJsonToOptions(plainJsonParams, &jsonParams, &outputJsonParams);
         NCatboostOptions::TCatBoostOptions catBoostOptions(NCatboostOptions::LoadOptions(jsonParams));
 
-        return ConstructQuantizationOptions(catBoostOptions, metaInfo, bordersFile, quantizedFeaturesInfo);
+        return PrepareQuantizationParameters(
+            catBoostOptions,
+            metaInfo,
+            bordersFile,
+            quantizationOptions,
+            quantizedFeaturesInfo);
     }
 
 

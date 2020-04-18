@@ -413,7 +413,7 @@ class Pool(_PoolBase):
                     raise CatBoostError(
                         "feature_names should have None or string type when the pool is read from the file."
                     )
-                self._read(data, column_description, pairs, feature_names, delimiter, None, has_header, thread_count)
+                self._read(data, column_description, pairs, feature_names, delimiter, has_header, thread_count)
             else:
                 if isinstance(data, FeaturesData):
                     if any(v is not None for v in [cat_features, text_features, feature_names]):
@@ -846,9 +846,9 @@ class Pool(_PoolBase):
         pairs,
         feature_names_path,
         delimiter,
-        quantization_params,
         has_header,
-        thread_count
+        thread_count,
+        quantization_params=None
     ):
         """
         Read Pool from file.

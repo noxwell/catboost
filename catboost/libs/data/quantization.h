@@ -46,6 +46,22 @@ namespace NCB {
         ESparseArrayIndexingType SparseArrayIndexingType = ESparseArrayIndexingType::Indices;
     };
 
+    void PrepareQuantizationParameters(
+        const NCatboostOptions::TCatBoostOptions& params,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizationOptions* quantizationOptions,
+        TQuantizedFeaturesInfoPtr* quantizedFeaturesInfo
+    );
+
+    void PrepareQuantizationParameters(
+        NJson::TJsonValue plainJsonParams,
+        const TDataMetaInfo& metaInfo,
+        const TMaybe<TString>& bordersFile,
+        TQuantizationOptions* quantizationOptions,
+        TQuantizedFeaturesInfoPtr* quantizedFeaturesInfo
+    );
+
     /*
      * Used for optimization.
      * It is number of times more effective to iterate over dense data in incremental order instead of random
@@ -137,20 +153,6 @@ namespace NCB {
         NPar::TLocalExecutor* localExecutor,
         TRestorableFastRng64* rand,
         const TInitialBorders& initialBorders = Nothing()
-    );
-
-    TQuantizationOptions ConstructQuantizationOptions(
-        const NCatboostOptions::TCatBoostOptions& params,
-        const TDataMetaInfo& metaInfo,
-        const TMaybe<TString>& bordersFile,
-        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
-    );
-
-    TQuantizationOptions ConstructQuantizationOptions(
-        NJson::TJsonValue plainJsonParams,
-        const TDataMetaInfo& metaInfo,
-        const TMaybe<TString>& bordersFile,
-        TQuantizedFeaturesInfoPtr& quantizedFeaturesInfo
     );
 
     TQuantizedObjectsDataProviderPtr ConstructQuantizedPoolFromRawPool(
