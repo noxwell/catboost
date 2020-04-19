@@ -450,6 +450,15 @@ namespace {
         TUnsampledData UnsampledData;
     };
 
+    template <class T, class ValuesHolder>
+    TMaybeOwningConstArrayHolder<ui8> ExtractValuesForQuantizedVisitor(
+        const ValuesHolder& srcValues,
+        NPar::TLocalExecutor* localExecutor) {
+        TMaybeOwningConstArrayHolder<T> values =
+            TMaybeOwningConstArrayHolder<T>::CreateOwning(srcValues.template ExtractValues<T>(localExecutor));
+        return TMaybeOwningConstArrayHolder<ui8>::CreateOwningReinterpretCast(values);
+    }
+
     class TQuantizationSecondPassBlockConsumer {
     public:
         TQuantizationSecondPassBlockConsumer(
@@ -568,26 +577,35 @@ namespace {
                     TMaybeData<const IQuantizedFloatValuesHolder*> feature =
                         quantizedObjectsData->GetFloatFeature(*floatFeatureIdx);
 
-                    if (feature) {
+                    if (featureMetaInfo.IsAvailable) {
+                        CB_ENSURE_INTERNAL(
+                            feature,
+                            "GetFloatFeature returned nothing for available feature" << flatFeatureIdx);
                         CB_ENSURE_INTERNAL(
                             feature.GetRef(),
-                            "GetFloatFeature returned nullptr for feature " << flatFeatureIdx
-                            << " which is not ignored");
+                            "GetFloatFeature returned nullptr for available feature " << flatFeatureIdx);
+                        CB_ENSURE_INTERNAL(
+                            quantizedFeaturesInfo->HasBorders(floatFeatureIdx),
+                            "There is no borders for available feature " << flatFeatureIdx);
 
-                        // add feature to builder
-                        auto values = TMaybeOwningConstArrayHolder<IQuantizedFloatValuesHolder::TValueType>::
-                            CreateOwning(
-                                feature.GetRef()->ExtractValues<IQuantizedFloatValuesHolder::TValueType>(
-                                    LocalExecutor));
+                        TMaybeOwningConstArrayHolder<ui8> values;
+                        const ui8 bitsPerKey = CalcHistogramWidthForBorders(
+                            quantizedFeaturesInfo->GetBorders(floatFeatureIdx).size());
+                        switch (bitsPerKey) {
+                            case 8:
+                                values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
+                                break;
+                            case 16:
+                                values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
+                                break;
+                            default:
+                                CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
+                        }
                         QuantizedDataVisitor->AddFloatFeaturePart(
                             flatFeatureIdx,
                             ObjectOffset,
-                            sizeof(IQuantizedFloatValuesHolder::TValueType) * 8,
+                            bitsPerKey,
                             values);
-                    } else {
-                        CB_ENSURE_INTERNAL(
-                            featureMetaInfo.IsIgnored,
-                            "If GetFloatFeature returns Nothing(), feature must be ignored");
                     }
                 } else if (featureMetaInfo.Type == EFeatureType::Categorical) {
                     const auto catFeatureIdx =
@@ -596,26 +614,35 @@ namespace {
                     TMaybeData<const IQuantizedCatValuesHolder*> feature =
                         quantizedObjectsData->GetCatFeature(*catFeatureIdx);
 
-                    if (feature) {
+                    if (featureMetaInfo.IsAvailable) {
+                        CB_ENSURE_INTERNAL(
+                            feature,
+                            "GetCatFeature returned nothing for available feature" << flatFeatureIdx);
                         CB_ENSURE_INTERNAL(
                             feature.GetRef(),
-                            "GetCatFeature returned nullptr for feature " << flatFeatureIdx
-                            << " which is not ignored");
+                            "GetCatFeature returned nullptr for available feature " << flatFeatureIdx);
 
-                        // add feature to builder
-                        auto values =
-                            TMaybeOwningConstArrayHolder<IQuantizedCatValuesHolder::TValueType>::CreateOwning(
-                                feature.GetRef()->ExtractValues<IQuantizedCatValuesHolder::TValueType>(
-                                    LocalExecutor));
+                        TMaybeOwningConstArrayHolder<ui8> values;
+                        const ui8 bitsPerKey = CalcHistogramWidthForUniqueValuesCounts(
+                            quantizedFeaturesInfo->GetUniqueValuesCounts(catFeatureIdx).OnAll);
+                        switch (bitsPerKey) {
+                            case 8:
+                                values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
+                                break;
+                            case 16:
+                                values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
+                                break;
+                            case 32:
+                                values = ExtractValuesForQuantizedVisitor<ui32>(**feature, LocalExecutor);
+                                break;
+                            default:
+                                CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
+                        }
                         QuantizedDataVisitor->AddCatFeaturePart(
                             flatFeatureIdx,
                             ObjectOffset,
                             sizeof(IQuantizedCatValuesHolder::TValueType) * 8,
                             TMaybeOwningConstArrayHolder<ui8>::CreateOwningReinterpretCast(values));
-                    } else {
-                        CB_ENSURE_INTERNAL(
-                            featureMetaInfo.IsIgnored,
-                            "If GetCatFeature returns Nothing(), feature must be ignored");
                     }
                 } else {
                     CB_ENSURE_INTERNAL(

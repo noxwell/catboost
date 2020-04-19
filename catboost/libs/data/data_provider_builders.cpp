@@ -1877,15 +1877,8 @@ namespace NCB {
                         bitsPerFeature = CalcHistogramWidthForBorders(
                             quantizedFeaturesInfoPtr->GetBorders(TFloatFeatureIdx(perTypeFeatureIdx)).size());
                     } else {
-                        const ui32 countUnique =
-                            quantizedFeaturesInfoPtr->GetUniqueValuesCounts(TCatFeatureIdx(perTypeFeatureIdx)).OnAll;
-                        if (countUnique <= 1ULL << 8) {
-                            bitsPerFeature = 8;
-                        } else if (countUnique <= 1ULL << 16) {
-                            bitsPerFeature = 16;
-                        } else { //TODO
-                            bitsPerFeature = 32;
-                        }
+                        bitsPerFeature = CalcHistogramWidthForUniqueValuesCounts(
+                            quantizedFeaturesInfoPtr->GetUniqueValuesCounts(TCatFeatureIdx(perTypeFeatureIdx)).OnAll);
                     }
 
                     IndexHelpers[perTypeFeatureIdx] = TIndexHelper<ui64>(bitsPerFeature);
