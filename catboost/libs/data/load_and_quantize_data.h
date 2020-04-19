@@ -30,6 +30,7 @@ namespace NCB {
         const TPathWithScheme& timestampsFilePath, // can be uninited
         const TPathWithScheme& baselineFilePath, // can be uninited
         const TPathWithScheme& featureNamesPath, // can be uninited
+        const TPathWithScheme& inputBordersPath, // can be uninited
         const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
         const TVector<ui32>& ignoredFeatures,
         EObjectsOrder objectsOrder,
@@ -49,6 +50,7 @@ namespace NCB {
         const TPathWithScheme& timestampsFilePath, // can be uninited
         const TPathWithScheme& baselineFilePath, // can be uninited
         const TPathWithScheme& featureNamesPath, // can be uninited
+        const TPathWithScheme& inputBordersPath, // can be uninited
         const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
         const TVector<ui32>& ignoredFeatures,
         EObjectsOrder objectsOrder,

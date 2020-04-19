@@ -864,6 +864,7 @@ cdef extern from "catboost/libs/data/load_and_quantize_data.h" namespace "NCB":
         const TPathWithScheme& timestampsFilePath,
         const TPathWithScheme& baselineFilePath,
         const TPathWithScheme& featureNamesPath,
+        const TPathWithScheme& inputBordersPath,
         const TColumnarPoolFormatParams& columnarPoolFormatParams,
         const TVector[ui32]& ignoredFeatures,
         EObjectsOrder objectsOrder,
@@ -3438,7 +3439,7 @@ cdef class _PoolBase:
         thread_count = UpdateThreadCount(thread_count)
 
         cdef TVector[ui32] emptyIntVec
-        cdef TQuantizedFeaturesInfoPtr quantizedFeaturesInfo
+        cdef TPathWithScheme input_borders_file_path
 
         if quantization_params is not None:
             input_borders = quantization_params.pop("input_borders", None)
@@ -3446,7 +3447,7 @@ cdef class _PoolBase:
             prep_params = _PreprocessParams(quantization_params)
 
             if input_borders:
-                quantized_features_info = _init_quantized_feature_info(self.__pool, input_borders)
+                input_borders_file_path = TPathWithScheme(<TStringBuf>to_arcadia_string(input_borders), TStringBuf(<char*>'dsv'))
 
             self.__pool = ReadAndQuantizeDataset(
                 pool_file_path,
@@ -3455,12 +3456,13 @@ cdef class _PoolBase:
                 TPathWithScheme(),
                 TPathWithScheme(),
                 feature_names_file_path,
+                input_borders_file_path,
                 columnarPoolFormatParams,
                 emptyIntVec,
                 EObjectsOrder_Undefined,
                 prep_params.tree,
                 block_size,
-                quantized_features_info,
+                TQuantizedFeaturesInfoPtr(),
                 thread_count,
                 False
             )

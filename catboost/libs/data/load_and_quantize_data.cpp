@@ -62,12 +62,14 @@ namespace {
     public:
         TRawObjectsOrderQuantizationFirstPassVisitor(
             NJson::TJsonValue plainJsonParams,
+            TMaybe<TString> inputBordersPath,
             TQuantizedFeaturesInfoPtr quantizedFeaturesInfo,
             THolder<IDataProviderBuilder> builder,
             TRestorableFastRng64* rand,
             NPar::TLocalExecutor* localExecutor)
             : LocalExecutor(localExecutor)
             , PlainJsonParams(std::move(plainJsonParams))
+            , InputBordersPath(std::move(inputBordersPath))
             , QuantizedFeaturesInfo(std::move(quantizedFeaturesInfo))
             , DataBuilder(std::move(builder))
             , DataVisitor(dynamic_cast<NCB::IRawObjectsOrderDataVisitor*>(DataBuilder.Get()))
@@ -104,13 +106,9 @@ namespace {
             PrepareQuantizationParameters(
                 PlainJsonParams,
                 metaInfo,
-                /* bordersFile */ Nothing(),
+                InputBordersPath,
                 &QuantizationOptions,
                 &QuantizedFeaturesInfo);
-
-            CB_ENSURE_INTERNAL(
-                *metaInfo.FeaturesLayout.Get() == *QuantizedFeaturesInfo->GetFeaturesLayout().Get(),
-                "features layout is changed while constructing quantization options");
 
             SampleSubset = MakeIncrementalIndexing(
                 GetArraySubsetForBuildBorders(
@@ -395,10 +393,6 @@ namespace {
                 CB_ENSURE_INTERNAL(rawDataProvider, "Failed to cast data provider to TRawDataProviderPtr");
             }
 
-            CB_ENSURE_INTERNAL(
-                *rawDataProvider->MetaInfo.FeaturesLayout.Get() == *QuantizedFeaturesInfo->GetFeaturesLayout().Get(),
-                "features layout was changed by builder");
-
             CalcBordersAndNanMode(
                 QuantizationOptions,
                 rawDataProvider,
@@ -425,6 +419,7 @@ namespace {
         NPar::TLocalExecutor* LocalExecutor;
 
         NJson::TJsonValue PlainJsonParams;
+        TMaybe<TString> InputBordersPath;
         TQuantizationOptions QuantizationOptions;
         TQuantizedFeaturesInfoPtr QuantizedFeaturesInfo;
 
@@ -455,6 +450,7 @@ namespace {
     TMaybeOwningConstArrayHolder<ui8> ExtractValuesForQuantizedVisitor(
         const ValuesHolder& srcValues,
         NPar::TLocalExecutor* localExecutor) {
+
         TMaybeOwningConstArrayHolder<T> values =
             TMaybeOwningConstArrayHolder<T>::CreateOwning(srcValues.template ExtractValues<T>(localExecutor));
         return TMaybeOwningConstArrayHolder<ui8>::CreateOwningReinterpretCast(values);
@@ -768,6 +764,7 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
     const TPathWithScheme& timestampsFilePath,   // can be uninited
     const TPathWithScheme& baselineFilePath,     // can be uninited
     const TPathWithScheme& featureNamesPath,     // can be uninited
+    const TPathWithScheme& inputBordersPath,     // can be uninited
     const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
     const TVector<ui32>& ignoredFeatures,
     EObjectsOrder objectsOrder,
@@ -826,8 +823,17 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
 
     TRestorableFastRng64 rand(catBoostOptions.RandomSeed);
 
+    TMaybe<TString> inputBordersPathString;
+    if (inputBordersPath.Inited()) {
+        CB_ENSURE(
+            inputBordersPath.Scheme == "dsv",
+            "Unknown input borders scheme " << inputBordersPath.Scheme);
+        inputBordersPathString = inputBordersPath.Path;
+    }
+
     TRawObjectsOrderQuantizationFirstPassVisitor firstPassVisitor(
         plainJsonParams,
+        inputBordersPathString,
         quantizedFeaturesInfo,
         CreateDataProviderBuilder(
             datasetLoader->GetVisitorType(),
@@ -867,6 +873,7 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
     const TPathWithScheme& timestampsFilePath,   // can be uninited
     const TPathWithScheme& baselineFilePath,     // can be uninited
     const TPathWithScheme& featureNamesPath,     // can be uninited
+    const TPathWithScheme& inputBordersPath,     // can be uninited
     const NCatboostOptions::TColumnarPoolFormatParams& columnarPoolFormatParams,
     const TVector<ui32>& ignoredFeatures,
     EObjectsOrder objectsOrder,
@@ -889,6 +896,7 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
         timestampsFilePath,
         baselineFilePath,
         featureNamesPath,
+        inputBordersPath,
         columnarPoolFormatParams,
         ignoredFeatures,
         objectsOrder,

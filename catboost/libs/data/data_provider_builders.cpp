@@ -1970,7 +1970,7 @@ namespace NCB {
 
 
                     memcpy(
-                        ((ui8*)DenseDstView[*perTypeFeatureIdx].data()) + objectOffset,
+                        ((ui8*)DenseDstView[*perTypeFeatureIdx].data()) + objectOffsetInBytes,
                         featuresPart.data(),
                         featuresPart.size());
                 }

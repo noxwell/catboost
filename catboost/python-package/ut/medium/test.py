@@ -89,6 +89,8 @@ QUERYWISE_CD_FILE_WITH_SUBGROUP_ID = data_file('querywise', 'train.cd.subgroup_i
 QUERYWISE_TRAIN_PAIRS_FILE = data_file('querywise', 'train.pairs')
 QUERYWISE_TRAIN_PAIRS_FILE_WITH_PAIR_WEIGHT = data_file('querywise', 'train.pairs.weighted')
 QUERYWISE_TEST_PAIRS_FILE = data_file('querywise', 'test.pairs')
+QUERYWISE_FEATURE_NAMES_FILE = data_file('querywise', 'train.feature_names')
+QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE = data_file('querywise', 'train.quantization_borders_example')
 
 QUANTIZED_TRAIN_FILE = data_file('quantized_adult', 'train.qbin')
 QUANTIZED_TEST_FILE = data_file('quantized_adult', 'test.qbin')
@@ -7658,14 +7660,44 @@ def test_penalties_coefficient_work():
     assert any(model_without_feature_penalties.predict_proba(pool)[0] != model_with_feature_penalties.predict_proba(pool)[0])
 
 
-def test_pool_load_and_quantize():
-    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
-    quantized_pool.quantize()
+LOAD_AND_QUANTIZE_TEST_PARAMS = {
+    'querywise_without_params':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {}),
+    'querywise_pairs':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'pairs': QUERYWISE_TRAIN_PAIRS_FILE}, {}),
+    'querywise_feature_names':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'feature_names': QUERYWISE_FEATURE_NAMES_FILE}, {}),
+    'querywise_ignored_features':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'ignored_features': [4, 8, 15]}),
+    'querywise_per_float_feature_quantization':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'per_float_feature_quantization': ['1:border_count=70']}),
+    'querywise_border_count':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'border_count': 500}),
+    'querywise_feature_border_type':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'feature_border_type': 'Median'}),
+    'querywise_input_borders':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'input_borders': QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE}),
+}
 
-    quantized_on_load_pool = quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+
+@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params', 'quantize_params'),
+                         argvalues=LOAD_AND_QUANTIZE_TEST_PARAMS.values(), ids=LOAD_AND_QUANTIZE_TEST_PARAMS.keys())
+def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params):
+    quantized_pool = Pool(pool_file, column_description=column_description, **load_params)
+    quantized_pool.quantize(**quantize_params)
+
+    all_params = load_params.copy()
+    all_params.update(quantize_params)
+
+    quantized_on_load_pool = quantize(pool_file, column_description=column_description, **all_params)
 
     assert quantized_on_load_pool.is_quantized()
     assert quantized_pool == quantized_on_load_pool
+
+    if load_params or quantize_params:
+        quantized_without_params_pool = Pool(pool_file, column_description=column_description)
+        quantized_without_params_pool.quantize()
+        assert quantized_pool != quantized_without_params_pool
 
 
 def test_pool_load_and_quantize_small_subset():
