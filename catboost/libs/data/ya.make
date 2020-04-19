@@ -31,6 +31,7 @@ SRCS(
     objects_grouping.cpp
     order.cpp
     packed_binary_features.cpp
+    proceed_pool_in_blocks.cpp
     quantization.cpp
     quantized_features_info.cpp
     sparse_columns.cpp

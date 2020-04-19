@@ -2,6 +2,7 @@
 
 #include "baseline.h"
 #include "data_provider_builders.h"
+#include "proceed_pool_in_blocks.h"
 #include "quantization.h"
 #include "util.h"
 #include "visitor.h"
@@ -11,9 +12,9 @@
 #include <catboost/libs/helpers/exception.h>
 #include <catboost/libs/helpers/maybe_data.h>
 #include <catboost/libs/logging/logging.h>
-#include <catboost/private/libs/app_helpers/proceed_pool_in_blocks.h>
 #include <catboost/private/libs/data_types/pair.h>
 #include <catboost/private/libs/data_util/path_with_scheme.h>
+#include <catboost/private/libs/options/dataset_reading_params.h>
 #include <catboost/private/libs/options/load_options.h>
 #include <catboost/private/libs/options/plain_options_helper.h>
 #include <catboost/private/libs/quantization/utils.h>
@@ -500,6 +501,10 @@ namespace {
             for (auto flatFeatureIdx : xrange(featuresLayout->GetExternalFeatureCount())) {
                 const auto featureMetaInfo = featuresLayout->GetExternalFeatureMetaInfo(flatFeatureIdx);
 
+                if (featureMetaInfo.IsIgnored) {
+                    IgnoredFeatures.emplace_back(flatFeatureIdx);
+                }
+
                 if (featureMetaInfo.Type == EFeatureType::Float) {
                     const auto floatFeatureIdx =
                         featuresLayout->GetInternalFeatureIdx<EFeatureType::Float>(flatFeatureIdx);
@@ -534,6 +539,10 @@ namespace {
                     std::move(catFeatureIndices),
                     TVector<TMap<ui32, TValueWithCount>>() // TODO(vetaleha): build CatFeaturesPerfectHash
                 });
+        }
+
+        TVector<ui32> GetIgnoredFeatures() {
+            return IgnoredFeatures;
         }
 
         void ProcessBlock(TDataProviderPtr dataBlock) {
@@ -745,6 +754,8 @@ namespace {
         EObjectsOrder ObjectsOrder;
         ui32 ObjectOffset;
 
+        TVector<ui32> IgnoredFeatures;
+
         TRestorableFastRng64* Rand;
     };
 
@@ -834,11 +845,12 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
         &rand,
         localExecutor);
 
-    TAnalyticalModeCommonParams params;
+    TDatasetReadingParams params;
     params.ColumnarPoolFormatParams = columnarPoolFormatParams;
-    params.InputPath = poolPath;
+    params.PoolPath = poolPath;
     params.FeatureNamesPath = featureNamesPath;
     params.ClassLabels = **classLabels;
+    params.IgnoredFeatures = secondPassQuantizer.GetIgnoredFeatures();
     ReadAndProceedPoolInBlocks(
         params,
         *blockSize,
