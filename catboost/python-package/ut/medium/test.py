@@ -7661,44 +7661,121 @@ def test_penalties_coefficient_work():
 
 
 LOAD_AND_QUANTIZE_TEST_PARAMS = {
-    'querywise_without_params':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {}, {}),
-    'querywise_pairs':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'pairs': QUERYWISE_TRAIN_PAIRS_FILE}, {}, {}),
-    'querywise_feature_names':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'feature_names': QUERYWISE_FEATURE_NAMES_FILE}, {}, {}),
-    'querywise_ignored_features':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'ignored_features': [4, 8, 15]}, {}),
-    'querywise_per_float_feature_quantization':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'per_float_feature_quantization': ['1:border_count=70']}, {}),
-    'querywise_border_count':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'border_count': 500}, {}),
-    'querywise_feature_border_type':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'feature_border_type': 'Median'}, {}),
-    'querywise_input_borders':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'input_borders': QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE}, {}),
-    'querywise_small_subset':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'dev_max_subset_size_for_build_borders': 100}, {}),
-    'querywise_small_block_small_subset':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'dev_max_subset_size_for_build_borders': 100}, {'dev_block_size': 500}),
+    'querywise_without_params': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_pairs': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {'pairs': QUERYWISE_TRAIN_PAIRS_FILE},  # load_params
+        {},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_feature_names': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {'feature_names': QUERYWISE_FEATURE_NAMES_FILE},  # load_params
+        {},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_ignored_features': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {'ignored_features': [4, 8, 15]},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_per_float_feature_quantization': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {'per_float_feature_quantization': ['1:border_count=70']},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_border_count': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {'border_count': 500},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_feature_border_type': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {'feature_border_type': 'Median'},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        True,  # subset_quantization_differs
+    ),
+    'querywise_input_borders': (
+        QUERYWISE_TRAIN_FILE,
+        QUERYWISE_CD_FILE,
+        {},  # load_params
+        {'input_borders': QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE},  # quantize_params
+        500,  # small_block_size
+        100,  # small_subset_size
+        False,  # subset_quantization_differs
+    ),
     # TODO(vetaleha): test for non-default nan_mode parameter
 }
 
 
-@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params', 'quantize_params', 'quantize_on_load_params'),
+@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params','quantize_params',
+                          'small_block_size', 'small_subset_size', 'subset_quantization_differs'),
                          argvalues=LOAD_AND_QUANTIZE_TEST_PARAMS.values(), ids=LOAD_AND_QUANTIZE_TEST_PARAMS.keys())
-def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params, quantize_on_load_params):
+def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params,
+                                small_block_size, small_subset_size, subset_quantization_differs):
     quantized_pool = Pool(pool_file, column_description=column_description, **load_params)
     quantized_pool.quantize(**quantize_params)
 
-    quantize_on_load_params = quantize_on_load_params.copy()
-    quantize_on_load_params.update(quantize_params)
+    quantized_pool_small_subset = Pool(pool_file, column_description=column_description, **load_params)
+    quantized_pool_small_subset.quantize(dev_max_subset_size_for_build_borders=small_subset_size, **quantize_params)
+
+    quantize_on_load_params = quantize_params.copy()
     quantize_on_load_params.update(load_params)
 
     quantized_on_load_pool = quantize(pool_file, column_description=column_description, **quantize_on_load_params)
+    quantized_on_load_pool_small_blocks = quantize(
+        pool_file,
+        column_description=column_description,
+        dev_block_size=small_block_size,
+        **quantize_on_load_params)
+    quantized_on_load_pool_small_subset = quantize(
+        pool_file,
+        column_description=column_description,
+        dev_max_subset_size_for_build_borders=small_subset_size,
+        **quantize_on_load_params)
+    quantized_on_load_pool_small_blocks_and_subset = quantize(
+        pool_file,
+        column_description=column_description,
+        dev_block_size=small_block_size,
+        dev_max_subset_size_for_build_borders=small_subset_size,
+        **quantize_on_load_params)
 
     assert quantized_on_load_pool.is_quantized()
     assert quantized_pool == quantized_on_load_pool
+    assert quantized_pool == quantized_on_load_pool_small_blocks
+
+    assert (quantized_pool != quantized_pool_small_subset) == subset_quantization_differs
+    assert quantized_pool_small_subset == quantized_on_load_pool_small_subset
+    assert quantized_pool_small_subset == quantized_on_load_pool_small_blocks_and_subset
 
     if load_params or quantize_params:
         quantized_without_params_pool = Pool(pool_file, column_description=column_description)

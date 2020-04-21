@@ -14,7 +14,12 @@ namespace NLastGetopt {
 }
 
 namespace NCatboostOptions {
-    struct TDatasetReadingParams {
+    class TDatasetReadingParams {
+    public:
+        void BindParserOpts(NLastGetopt::TOpts* parser);
+        void ValidatePoolParams() const;
+
+    public:
         NCatboostOptions::TColumnarPoolFormatParams ColumnarPoolFormatParams;
 
         NCB::TPathWithScheme PoolPath;
@@ -25,10 +30,6 @@ namespace NCatboostOptions {
         NCB::TPathWithScheme FeatureNamesPath;
 
         TVector<ui32> IgnoredFeatures;
-
-        void BindParserOpts(NLastGetopt::TOpts* parser);
-
-        void ValidatePoolParams() const;
     };
 
     void BindColumnarPoolFormatParams(
