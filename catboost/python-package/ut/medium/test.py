@@ -7721,7 +7721,7 @@ LOAD_AND_QUANTIZE_TEST_PARAMS = {
 }
 
 
-@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params','quantize_params',
+@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params', 'quantize_params',
                           'subset_quantization_differs'),
                          argvalues=LOAD_AND_QUANTIZE_TEST_PARAMS.values(), ids=LOAD_AND_QUANTIZE_TEST_PARAMS.keys())
 def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params,
