@@ -7,12 +7,13 @@
 #include <library/json/json_value.h>
 
 #include <util/generic/vector.h>
+#include <util/system/types.h>
 
 namespace NLastGetopt {
     class TOpts;
 }
 
-namespace NCB {
+namespace NCatboostOptions {
     struct TDatasetReadingParams {
         NCatboostOptions::TColumnarPoolFormatParams ColumnarPoolFormatParams;
 
@@ -27,7 +28,7 @@ namespace NCB {
 
         void BindParserOpts(NLastGetopt::TOpts* parser);
 
-        void Validate() const;
+        void ValidatePoolParams() const;
     };
 
     void BindColumnarPoolFormatParams(

@@ -1,5 +1,6 @@
 #include "data_provider_builders.h"
 
+#include "cat_feature_perfect_hash.h"
 #include "data_provider.h"
 #include "feature_index.h"
 #include "lazy_columns.h"
@@ -1877,7 +1878,7 @@ namespace NCB {
                         bitsPerFeature = CalcHistogramWidthForBorders(
                             quantizedFeaturesInfoPtr->GetBorders(TFloatFeatureIdx(perTypeFeatureIdx)).size());
                     } else {
-                        bitsPerFeature = CalcHistogramWidthForUniqueValuesCounts(
+                        bitsPerFeature = CalcHistogramWidthForUniqueValuesCount(
                             quantizedFeaturesInfoPtr->GetUniqueValuesCounts(TCatFeatureIdx(perTypeFeatureIdx)).OnAll);
                     }
 

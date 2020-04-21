@@ -105,8 +105,7 @@ void NCB::PrepareFstrModeParamsParser(
 }
 
 void NCB::ModeFstrSingleHost(const NCB::TAnalyticalModeCommonParams& params) {
-
-    params.DatasetReadingParams.Validate();
+    params.DatasetReadingParams.ValidatePoolParams();
 
     TFullModel model = ReadModel(params.ModelFileName, params.ModelFormat);
     if (model.HasCategoricalFeatures()) {

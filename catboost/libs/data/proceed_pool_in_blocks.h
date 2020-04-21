@@ -11,7 +11,7 @@
 #include <library/threading/local_executor/local_executor.h>
 
 template <class TConsumer>
-inline void ReadAndProceedPoolInBlocks(const NCB::TDatasetReadingParams& params,
+inline void ReadAndProceedPoolInBlocks(const NCatboostOptions::TDatasetReadingParams& params,
                                        ui32 blockSize,
                                        TConsumer&& poolConsumer,
                                        NPar::TLocalExecutor* localExecutor) {

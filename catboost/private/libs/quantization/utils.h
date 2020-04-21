@@ -179,15 +179,4 @@ namespace NCB {
         }
         return 16;
     }
-
-    inline ui8 CalcHistogramWidthForUniqueValuesCounts(ui32 countUnique) {
-        if (countUnique <= 1ULL << 8) {
-            return 8;
-        } else if (countUnique <= 1ULL << 16) {
-            return 16;
-        } else { //TODO
-            return 32;
-        }
-    }
-
 }

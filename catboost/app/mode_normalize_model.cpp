@@ -153,7 +153,7 @@ namespace {
             TMinMax<double> result{+DBL_MAX, -DBL_MAX};
             TMutex result_guard;
             ReadAndProceedPoolInBlocks(
-                TDatasetReadingParams{
+                NCatboostOptions::TDatasetReadingParams{
                     modeParams.ColumnarPoolFormatParams,
                     poolPath,
                     TVector<NJson::TJsonValue>(),  // ClassLabels

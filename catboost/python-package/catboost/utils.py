@@ -507,8 +507,8 @@ def quantize(
 
     Parameters
     ----------
-    data : string
-        Path (with optional scheme) to the file with non-quantized data.
+    data_path : string
+        Path (with optional scheme) to non-quantized dataset.
 
     column_description : string, [default=None]
         ColumnsDescription parameter.
@@ -605,9 +605,12 @@ def quantize(
         border_count = max_bin
 
     if 'dev_block_size' in kwargs:
-        params['dev_block_size'] = kwargs['dev_block_size']
+        params['dev_block_size'] = kwargs.pop('dev_block_size')
 
-    dev_max_subset_size_for_build_borders = kwargs.get('dev_max_subset_size_for_build_borders')
+    dev_max_subset_size_for_build_borders = kwargs.pop('dev_max_subset_size_for_build_borders', None)
+
+    if kwargs:
+        raise CatBoostError("got an unexpected keyword arguments: {}".format(kwargs.keys()))
 
     _update_params_quantize_part(
         params,

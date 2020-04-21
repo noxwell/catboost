@@ -1,6 +1,7 @@
 #include "load_and_quantize_data.h"
 
 #include "baseline.h"
+#include "cat_feature_perfect_hash.h"
 #include "data_provider_builders.h"
 #include "proceed_pool_in_blocks.h"
 #include "quantization.h"
@@ -486,8 +487,8 @@ namespace {
                 QuantizedDataVisitor,
                 "failed cast of IDataProviderBuilder to IQuantizedFeaturesDataVisitor");
 
-            const auto& quantizedFeaturesInfo = FirstPassResult.QuantizedFeaturesInfo;
-            const auto& featuresLayout = quantizedFeaturesInfo->GetFeaturesLayout();
+            const auto& quantizedFeaturesInfo = *FirstPassResult.QuantizedFeaturesInfo;
+            const auto featuresLayout = quantizedFeaturesInfo.GetFeaturesLayout();
 
             TVector<TVector<float>> borders;
             TVector<ENanMode> nanModes;
@@ -505,11 +506,11 @@ namespace {
                     const auto floatFeatureIdx =
                         featuresLayout->GetInternalFeatureIdx<EFeatureType::Float>(flatFeatureIdx);
 
-                    const auto featureBorders = quantizedFeaturesInfo->HasBorders(floatFeatureIdx)
-                                                ? quantizedFeaturesInfo->GetBorders(floatFeatureIdx)
+                    const auto featureBorders = quantizedFeaturesInfo.HasBorders(floatFeatureIdx)
+                                                ? quantizedFeaturesInfo.GetBorders(floatFeatureIdx)
                                                 : TVector<float>();
-                    const auto featureNanMode = quantizedFeaturesInfo->HasNanMode(floatFeatureIdx)
-                                                ? quantizedFeaturesInfo->GetNanMode(floatFeatureIdx)
+                    const auto featureNanMode = quantizedFeaturesInfo.HasNanMode(floatFeatureIdx)
+                                                ? quantizedFeaturesInfo.GetNanMode(floatFeatureIdx)
                                                 : ENanMode::Forbidden;
                     borders.push_back(featureBorders);
                     nanModes.push_back(featureNanMode);
@@ -570,10 +571,14 @@ namespace {
                 QuantizedDataVisitor->AddTimestampPart(ObjectOffset, TUnalignedArrayBuf<ui64>(*timestamps));
             }
 
-            const auto& quantizedFeaturesInfo = quantizedObjectsData->GetQuantizedFeaturesInfo();
-            const auto& featuresLayout = quantizedFeaturesInfo->GetFeaturesLayout();
+            const auto quantizedFeaturesInfo = quantizedObjectsData->GetQuantizedFeaturesInfo();
+            const auto featuresLayout = quantizedFeaturesInfo->GetFeaturesLayout();
             for (auto flatFeatureIdx : xrange(featuresLayout->GetExternalFeatureCount())) {
                 const auto featureMetaInfo = featuresLayout->GetExternalFeatureMetaInfo(flatFeatureIdx);
+
+                if (!featureMetaInfo.IsAvailable) {
+                    continue;
+                }
 
                 if (featureMetaInfo.Type == EFeatureType::Float) {
                     const auto floatFeatureIdx =
@@ -582,36 +587,34 @@ namespace {
                     TMaybeData<const IQuantizedFloatValuesHolder*> feature =
                         quantizedObjectsData->GetFloatFeature(*floatFeatureIdx);
 
-                    if (featureMetaInfo.IsAvailable) {
-                        CB_ENSURE_INTERNAL(
-                            feature,
-                            "GetFloatFeature returned nothing for available feature" << flatFeatureIdx);
-                        CB_ENSURE_INTERNAL(
-                            feature.GetRef(),
-                            "GetFloatFeature returned nullptr for available feature " << flatFeatureIdx);
-                        CB_ENSURE_INTERNAL(
-                            quantizedFeaturesInfo->HasBorders(floatFeatureIdx),
-                            "There is no borders for available feature " << flatFeatureIdx);
+                    CB_ENSURE_INTERNAL(
+                        feature,
+                        "GetFloatFeature returned nothing for available feature " << flatFeatureIdx);
+                    CB_ENSURE_INTERNAL(
+                        feature.GetRef(),
+                        "GetFloatFeature returned nullptr for available feature " << flatFeatureIdx);
+                    CB_ENSURE_INTERNAL(
+                        quantizedFeaturesInfo->HasBorders(floatFeatureIdx),
+                        "There is no borders for available feature " << flatFeatureIdx);
 
-                        TMaybeOwningConstArrayHolder<ui8> values;
-                        const ui8 bitsPerKey = CalcHistogramWidthForBorders(
-                            quantizedFeaturesInfo->GetBorders(floatFeatureIdx).size());
-                        switch (bitsPerKey) {
-                            case 8:
-                                values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
-                                break;
-                            case 16:
-                                values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
-                                break;
-                            default:
-                                CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
-                        }
-                        QuantizedDataVisitor->AddFloatFeaturePart(
-                            flatFeatureIdx,
-                            ObjectOffset,
-                            bitsPerKey,
-                            values);
+                    TMaybeOwningConstArrayHolder<ui8> values;
+                    const ui8 bitsPerKey = CalcHistogramWidthForBorders(
+                        quantizedFeaturesInfo->GetBorders(floatFeatureIdx).size());
+                    switch (bitsPerKey) {
+                        case 8:
+                            values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
+                            break;
+                        case 16:
+                            values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
+                            break;
+                        default:
+                            CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
                     }
+                    QuantizedDataVisitor->AddFloatFeaturePart(
+                        flatFeatureIdx,
+                        ObjectOffset,
+                        bitsPerKey,
+                        values);
                 } else if (featureMetaInfo.Type == EFeatureType::Categorical) {
                     const auto catFeatureIdx =
                         featuresLayout->GetInternalFeatureIdx<EFeatureType::Categorical>(flatFeatureIdx);
@@ -619,36 +622,34 @@ namespace {
                     TMaybeData<const IQuantizedCatValuesHolder*> feature =
                         quantizedObjectsData->GetCatFeature(*catFeatureIdx);
 
-                    if (featureMetaInfo.IsAvailable) {
-                        CB_ENSURE_INTERNAL(
-                            feature,
-                            "GetCatFeature returned nothing for available feature" << flatFeatureIdx);
-                        CB_ENSURE_INTERNAL(
-                            feature.GetRef(),
-                            "GetCatFeature returned nullptr for available feature " << flatFeatureIdx);
+                    CB_ENSURE_INTERNAL(
+                        feature,
+                        "GetCatFeature returned nothing for available feature" << flatFeatureIdx);
+                    CB_ENSURE_INTERNAL(
+                        feature.GetRef(),
+                        "GetCatFeature returned nullptr for available feature " << flatFeatureIdx);
 
-                        TMaybeOwningConstArrayHolder<ui8> values;
-                        const ui8 bitsPerKey = CalcHistogramWidthForUniqueValuesCounts(
-                            quantizedFeaturesInfo->GetUniqueValuesCounts(catFeatureIdx).OnAll);
-                        switch (bitsPerKey) {
-                            case 8:
-                                values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
-                                break;
-                            case 16:
-                                values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
-                                break;
-                            case 32:
-                                values = ExtractValuesForQuantizedVisitor<ui32>(**feature, LocalExecutor);
-                                break;
-                            default:
-                                CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
-                        }
-                        QuantizedDataVisitor->AddCatFeaturePart(
-                            flatFeatureIdx,
-                            ObjectOffset,
-                            sizeof(IQuantizedCatValuesHolder::TValueType) * 8,
-                            TMaybeOwningConstArrayHolder<ui8>::CreateOwningReinterpretCast(values));
+                    TMaybeOwningConstArrayHolder<ui8> values;
+                    const ui8 bitsPerKey = CalcHistogramWidthForUniqueValuesCount(
+                        quantizedFeaturesInfo->GetUniqueValuesCounts(catFeatureIdx).OnAll);
+                    switch (bitsPerKey) {
+                        case 8:
+                            values = ExtractValuesForQuantizedVisitor<ui8>(**feature, LocalExecutor);
+                            break;
+                        case 16:
+                            values = ExtractValuesForQuantizedVisitor<ui16>(**feature, LocalExecutor);
+                            break;
+                        case 32:
+                            values = ExtractValuesForQuantizedVisitor<ui32>(**feature, LocalExecutor);
+                            break;
+                        default:
+                            CB_ENSURE_INTERNAL(false, "unexpected bitsPerKey: " << bitsPerKey);
                     }
+                    QuantizedDataVisitor->AddCatFeaturePart(
+                        flatFeatureIdx,
+                        ObjectOffset,
+                        sizeof(IQuantizedCatValuesHolder::TValueType) * 8,
+                        TMaybeOwningConstArrayHolder<ui8>::CreateOwningReinterpretCast(values));
                 } else {
                     CB_ENSURE_INTERNAL(
                         false,
@@ -851,7 +852,7 @@ TDataProviderPtr NCB::ReadAndQuantizeDataset(
         &rand,
         localExecutor);
 
-    TDatasetReadingParams params;
+    NCatboostOptions::TDatasetReadingParams params;
     params.ColumnarPoolFormatParams = columnarPoolFormatParams;
     params.PoolPath = poolPath;
     params.FeatureNamesPath = featureNamesPath;

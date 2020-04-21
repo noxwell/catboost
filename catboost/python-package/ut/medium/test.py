@@ -7662,34 +7662,40 @@ def test_penalties_coefficient_work():
 
 LOAD_AND_QUANTIZE_TEST_PARAMS = {
     'querywise_without_params':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {}, {}),
     'querywise_pairs':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'pairs': QUERYWISE_TRAIN_PAIRS_FILE}, {}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'pairs': QUERYWISE_TRAIN_PAIRS_FILE}, {}, {}),
     'querywise_feature_names':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'feature_names': QUERYWISE_FEATURE_NAMES_FILE}, {}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {'feature_names': QUERYWISE_FEATURE_NAMES_FILE}, {}, {}),
     'querywise_ignored_features':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'ignored_features': [4, 8, 15]}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'ignored_features': [4, 8, 15]}, {}),
     'querywise_per_float_feature_quantization':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'per_float_feature_quantization': ['1:border_count=70']}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'per_float_feature_quantization': ['1:border_count=70']}, {}),
     'querywise_border_count':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'border_count': 500}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'border_count': 500}, {}),
     'querywise_feature_border_type':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'feature_border_type': 'Median'}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'feature_border_type': 'Median'}, {}),
     'querywise_input_borders':
-        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'input_borders': QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE}),
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'input_borders': QUERYWISE_QUANTIZATION_BORDERS_EXAMPLE}, {}),
+    'querywise_small_subset':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'dev_max_subset_size_for_build_borders': 100}, {}),
+    'querywise_small_block_small_subset':
+        (QUERYWISE_TRAIN_FILE, QUERYWISE_CD_FILE, {}, {'dev_max_subset_size_for_build_borders': 100}, {'dev_block_size': 500}),
+    # TODO(vetaleha): test for non-default nan_mode parameter
 }
 
 
-@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params', 'quantize_params'),
+@pytest.mark.parametrize(('pool_file', 'column_description', 'load_params', 'quantize_params', 'quantize_on_load_params'),
                          argvalues=LOAD_AND_QUANTIZE_TEST_PARAMS.values(), ids=LOAD_AND_QUANTIZE_TEST_PARAMS.keys())
-def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params):
+def test_pool_load_and_quantize(pool_file, column_description, load_params, quantize_params, quantize_on_load_params):
     quantized_pool = Pool(pool_file, column_description=column_description, **load_params)
     quantized_pool.quantize(**quantize_params)
 
-    all_params = load_params.copy()
-    all_params.update(quantize_params)
+    quantize_on_load_params = quantize_on_load_params.copy()
+    quantize_on_load_params.update(quantize_params)
+    quantize_on_load_params.update(load_params)
 
-    quantized_on_load_pool = quantize(pool_file, column_description=column_description, **all_params)
+    quantized_on_load_pool = quantize(pool_file, column_description=column_description, **quantize_on_load_params)
 
     assert quantized_on_load_pool.is_quantized()
     assert quantized_pool == quantized_on_load_pool
@@ -7700,42 +7706,12 @@ def test_pool_load_and_quantize(pool_file, column_description, load_params, quan
         assert quantized_pool != quantized_without_params_pool
 
 
-def test_pool_load_and_quantize_small_subset():
-    SUBSET_SIZE = 100
-
-    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
-    assert SUBSET_SIZE < quantized_pool.num_row()
-    quantized_pool.quantize(dev_max_subset_size_for_build_borders=SUBSET_SIZE)
-
-    quantized_on_load_pool = quantize(
-        QUERYWISE_TRAIN_FILE,
-        column_description=QUERYWISE_CD_FILE,
-        dev_max_subset_size_for_build_borders=SUBSET_SIZE)
-
-    quantized_on_load_pool_other = quantize(
-        QUERYWISE_TRAIN_FILE,
-        column_description=QUERYWISE_CD_FILE,
-        dev_max_subset_size_for_build_borders=SUBSET_SIZE + 1)
-
-    assert quantized_on_load_pool.is_quantized()
-    assert quantized_pool == quantized_on_load_pool
-    assert quantized_pool != quantized_on_load_pool_other
+def test_pool_load_and_quantize_unknown_param():
+    with pytest.raises(CatBoostError):
+        quantize(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE, this_param_is_unknown=123)
 
 
-def test_pool_load_and_quantize_small_block_small_subset():
-    BLOCK_SIZE = 500
-    SUBSET_SIZE = 100
-
-    quantized_pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
-    assert SUBSET_SIZE < quantized_pool.num_row()
-    assert BLOCK_SIZE < quantized_pool.num_row()
-    quantized_pool.quantize(dev_max_subset_size_for_build_borders=SUBSET_SIZE)
-
-    quantized_on_load_pool = quantize(
-        QUERYWISE_TRAIN_FILE,
-        column_description=QUERYWISE_CD_FILE,
-        dev_max_subset_size_for_build_borders=SUBSET_SIZE,
-        dev_block_size=BLOCK_SIZE)
-
-    assert quantized_on_load_pool.is_quantized()
-    assert quantized_pool == quantized_on_load_pool
+def test_quantize_unknown_param():
+    pool = Pool(QUERYWISE_TRAIN_FILE, column_description=QUERYWISE_CD_FILE)
+    with pytest.raises(CatBoostError):
+        pool.quantize(this_param_is_unknown=123)

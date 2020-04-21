@@ -127,7 +127,7 @@ int mode_eval_metrics(int argc, const char* argv[]) {
     }
     TSetLoggingVerboseOrSilent inThisScope(verbose);
 
-    params.DatasetReadingParams.Validate();
+    params.DatasetReadingParams.ValidatePoolParams();
 
     TFullModel model = ReadModel(params.ModelFileName, params.ModelFormat);
     CB_ENSURE(

@@ -812,8 +812,11 @@ class Pool(_PoolBase):
         if border_count is None:
             border_count = max_bin
 
-        dev_efb_max_buckets = kwargs.get('dev_efb_max_buckets')
-        dev_max_subset_size_for_build_borders = kwargs.get('dev_max_subset_size_for_build_borders')
+        dev_efb_max_buckets = kwargs.pop('dev_efb_max_buckets', None)
+        dev_max_subset_size_for_build_borders = kwargs.pop('dev_max_subset_size_for_build_borders', None)
+
+        if kwargs:
+            raise CatBoostError("got an unexpected keyword arguments: {}".format(kwargs.keys()))
 
         _update_params_quantize_part(params, ignored_features, per_float_feature_quantization, border_count,
                                      feature_border_type, sparse_features_conflict_fraction, dev_efb_max_buckets,
@@ -868,9 +871,9 @@ class Pool(_PoolBase):
                 pairs,
                 feature_names_path,
                 delimiter[0],
-                quantization_params,
                 has_header,
-                thread_count
+                thread_count,
+                quantization_params
             )
 
     def _init(

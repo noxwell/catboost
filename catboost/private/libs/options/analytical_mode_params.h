@@ -14,7 +14,7 @@ namespace NLastGetopt {
 
 namespace NCB {
     struct TAnalyticalModeCommonParams {
-        TDatasetReadingParams DatasetReadingParams;
+        NCatboostOptions::TDatasetReadingParams DatasetReadingParams;
 
         TString ModelFileName;
         EModelType ModelFormat = EModelType::CatboostBinary;
