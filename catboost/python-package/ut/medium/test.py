@@ -6760,7 +6760,7 @@ def test_quantized_pool_train_predict(quantized_pool_fixture):
     params = quantized_pool_fixture['params']
 
     model = train(train_pool, params=params)
-    model_fitted_with_quantized_pool = train(train_pool, params=params)
+    model_fitted_with_quantized_pool = train(train_quantized_pool, params=params)
 
     predictions = model.predict(test_pool)
     predictions_with_quantized_pool = model_fitted_with_quantized_pool.predict(test_quantized_pool)
